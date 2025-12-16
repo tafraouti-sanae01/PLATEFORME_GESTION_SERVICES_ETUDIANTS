@@ -89,7 +89,7 @@ const RequestTracker = () => {
       <CardContent className="space-y-4">
         <div className="flex gap-2">
           <Input
-            placeholder="Entrez votre numéro de demande (ex: REQ-XXXXXX)"
+            placeholder="Entrez votre numéro de demande (ex: REQ-XXX-XXX)"
             value={referenceNumber}
             onChange={(e) => {
               setReferenceNumber(e.target.value);

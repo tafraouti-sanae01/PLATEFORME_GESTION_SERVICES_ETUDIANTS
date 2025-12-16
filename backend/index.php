@@ -142,6 +142,10 @@ switch (true) {
         handle_get_complaint_details($pdo, $matches[1]);
         break;
 
+    case $path === '/api/students/history' && $method === 'POST':
+        handle_get_student_history($pdo);
+        break;
+
     default:
         send_error('Route not found', 404);
 }
@@ -730,6 +734,13 @@ SQL;
                 $message = "Bonjour " . $request['etu_prenom'] . " " . $request['etu_nom'] . ",\n\n";
                 $message .= "Nous vous informons que votre demande de " . strtolower($docLabel) . " (Référence: " . $request['numero_reference'] . ") ";
                 $message .= "a été refusée.\n\n";
+                
+                // Ajouter les raisons du refus si fournies
+                if (!empty($input['rejectionReason']) && trim($input['rejectionReason']) !== '') {
+                    $message .= "Raisons du refus :\n";
+                    $message .= trim($input['rejectionReason']) . "\n\n";
+                }
+                
                 $message .= "Pour plus d'informations, merci de contacter le service de la scolarité.\n\n";
                 $message .= "Cordialement,\nLe Service de la Scolarité";
 
@@ -756,6 +767,71 @@ SQL;
     }
 
     send_json(['ok' => true]);
+}
+
+function handle_get_student_history(PDO $pdo): void
+{
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        send_error('Invalid JSON in request body', 400);
+    }
+    
+    if (!isset($input['studentId'])) {
+        send_error('Missing required field: studentId', 400);
+    }
+
+    try {
+        // Query to find years and semesters from registered modules
+        // We join inscrit_module with module_filiere (via module ID) to get the semester
+        // We assume year comes from 'session' column in inscrit_module
+        $sql = <<<SQL
+SELECT DISTINCT 
+    im.session as annee_universitaire,
+    mf.semestre
+FROM inscrit_module im
+JOIN module_filiere mf ON mf.id_module = im.id_module
+WHERE im.id_etudiant = :studentId
+ORDER BY im.session DESC, mf.semestre ASC
+SQL;
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':studentId' => $input['studentId']]);
+        $rows = $stmt->fetchAll();
+        
+        $history = [];
+        
+        // Group by academic year
+        foreach ($rows as $row) {
+            $year = $row['annee_universitaire'];
+            $semester = 'S' . $row['semestre'];
+            
+            if (!isset($history[$year])) {
+                $history[$year] = [
+                    'year' => $year,
+                    'semesters' => []
+                ];
+            }
+            
+            if (!in_array($semester, $history[$year]['semesters'])) {
+                $history[$year]['semesters'][] = $semester;
+            }
+        }
+        
+        // Re-index array to get a clean list
+        $result = array_values($history);
+        
+        // Sort semesters naturally (S1, S2, S3...)
+        foreach ($result as &$item) {
+            sort($item['semesters'], SORT_NATURAL);
+        }
+        
+        send_json($result);
+        
+    } catch (\PDOException $e) {
+        error_log('Erreur lors de la récupération de l\'historique étudiant: ' . $e->getMessage());
+        send_error('Erreur lors de la récupération de l\'historique', 500);
+    }
 }
 
 function handle_send_email(PDO $pdo, string $id): void
@@ -1484,12 +1560,8 @@ function generate_attestation_scolarite_html(array $request, string $logoUrl): s
                      <td> ' . htmlspecialchars($request['etu_apogee']) . '</td>
                 </tr>
                 <tr>
-                    <td style="font-weight: bold;">CIN/ N° Passeport</td>  
+                    <td style="font-weight: bold;">CIN</td>  
                      <td> ' . htmlspecialchars($request['etu_cin']) . '</td> 
-                </tr>
-                <tr>
-                    <td style="font-weight: bold;">CNE/MASSAR</td>  
-                     <td> ' . htmlspecialchars($request['etu_cin']) . '</td>
                 </tr>';
     
     // Ajouter date et lieu de naissance si disponibles
@@ -1619,7 +1691,7 @@ function generate_attestation_reussite_html(array $request, string $logoUrl): st
                      <td> ' . $dateNaissance . ' &nbsp;&nbsp;&nbsp; à ' . $lieuNaissance . '</td>
                 </tr>
                 <tr>
-                    <td style="font-weight: bold;">Portant le CNE</td>
+                    <td style="font-weight: bold;">CIN</td>
                      <td> ' . $cne . '</td>
                 </tr>
             </table>
@@ -1808,7 +1880,7 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
         <div style="margin-bottom: 5px;">
             N° Étudiant : <strong>' . $numeroEtudiant . '</strong>
             &nbsp;&nbsp;&nbsp;&nbsp;
-            CNE : <strong>' . $cne . '</strong>
+            CIN : <strong>' . $cne . '</strong>
         </div>';
     
     if ($dateNaissance && $lieuNaissance) {
@@ -1829,10 +1901,10 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
     <table border="1" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 10pt;">
         <thead>
             <tr style="background-color: #f0f0f0;">
-                <th style="padding: 8px; text-align: left; width: 40%;">Note/Barème</th>
+                <th style="padding: 8px; text-align: left; width: 40%;"></th>
+                <th style="padding: 8px; text-align: center; width: 20%;">Note/Barème</th>
                 <th style="padding: 8px; text-align: center; width: 20%;">Résultat</th>
                 <th style="padding: 8px; text-align: center; width: 20%;">Session</th>
-                <th style="padding: 8px; text-align: center; width: 20%;">Pts jury</th>
             </tr>
         </thead>
         <tbody>';
@@ -2660,7 +2732,14 @@ SQL;
                 $label .= ucfirst(str_replace('_', ' ', $documentType));
         }
         
-        $label .= ' - ' . ($status === 'pending' ? 'En attente' : ($status === 'accepted' ? 'Traitée' : 'En attente'));
+        // Afficher le statut correctement (en attente, traité, refusé)
+        $statusLabel = 'En attente';
+        if ($status === 'accepted' || $status === 'processed') {
+            $statusLabel = 'Traitée';
+        } elseif ($status === 'rejected' || $status === 'refused') {
+            $statusLabel = 'Refusée';
+        }
+        $label .= ' - ' . $statusLabel;
         
         return [
             'id' => $row['id_demande'],

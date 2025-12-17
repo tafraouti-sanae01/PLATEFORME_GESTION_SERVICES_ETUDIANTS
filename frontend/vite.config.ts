@@ -16,7 +16,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost/Service-scolarite/backend',
+        target: 'http://localhost/PLATEFORME_GESTION_SERVICES_ETUDIANTS/backend',
         changeOrigin: true,
         secure: false,
         // Ne pas réécrire le chemin, on veut garder /api dans l'URL

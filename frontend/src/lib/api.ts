@@ -26,7 +26,7 @@ function getApiBase(): string {
   }
 
   // En production, utiliser l'URL par défaut
-  return "http://localhost/Test_GL/backend";
+  return "http://localhost/PLATEFORME_GESTION_SERVICES_ETUDIANTS/backend";
 }
 
 const API_BASE = getApiBase();
@@ -288,7 +288,7 @@ export async function sendEmailToStudent(
 }
 
 export async function downloadDocument(requestId: string): Promise<Blob> {
-  const API_BASE_DOWNLOAD = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "" : "http://localhost/Service-scolarite/backend");
+  const API_BASE_DOWNLOAD = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "" : "http://localhost/PLATEFORME_GESTION_SERVICES_ETUDIANTS/backend");
   const res = await fetch(`${API_BASE_DOWNLOAD}/api/requests/${requestId}/download`, {
     method: "GET",
   });

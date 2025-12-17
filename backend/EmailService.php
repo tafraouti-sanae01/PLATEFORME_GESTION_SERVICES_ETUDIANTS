@@ -61,212 +61,39 @@ function get_email_footer(): string
 }
 
 /**
- * Détecte et convertit les sections de données structurées en HTML formaté
- */
-function format_structured_data(string $text): string
-{
-    // Détecter les sections avec séparateurs (lignes de tirets ou égal)
-    $lines = explode("\n", $text);
-    $result = [];
-    $inDataSection = false;
-    $dataLines = [];
-    $sectionTitle = '';
-    $pendingTitle = '';
-    
-    foreach ($lines as $i => $line) {
-        $trimmed = trim($line);
-        
-        // Détecter les séparateurs (lignes avec seulement des tirets, égal, ou caractères répétés)
-        if (preg_match('/^[-=]{3,}$/', $trimmed)) {
-            // Si on était dans une section de données, la fermer
-            if ($inDataSection && !empty($dataLines)) {
-                $result[] = format_data_section($sectionTitle, $dataLines);
-                $dataLines = [];
-                $sectionTitle = '';
-            }
-            // Le séparateur marque le début d'une nouvelle section
-            // Si on avait un titre en attente, l'utiliser
-            if (!empty($pendingTitle)) {
-                $sectionTitle = $pendingTitle;
-                $pendingTitle = '';
-            }
-            $inDataSection = true;
-            continue;
-        }
-        
-        // Si on est dans une section de données
-        if ($inDataSection) {
-            // Détecter un titre de section (ligne sans ":" ou ligne avec ":" à la fin sans valeur)
-            if (empty($dataLines) && !empty($trimmed)) {
-                // Si c'est un pattern "Label :" sans valeur, c'est un titre
-                if (preg_match('/^([^:]+):\s*$/', $trimmed, $matches)) {
-                    $sectionTitle = trim($matches[1]);
-                    continue;
-                }
-                // Si ce n'est pas un pattern label:valeur, c'est peut-être un titre
-                if (!preg_match('/^[^:]+:\s*.+$/', $trimmed)) {
-                    $sectionTitle = $trimmed;
-                    continue;
-                }
-            }
-            
-            // Détecter les patterns "Label : valeur"
-            if (preg_match('/^([^:]+):\s*(.+)$/', $trimmed, $matches)) {
-                $dataLines[] = [
-                    'label' => trim($matches[1]),
-                    'value' => trim($matches[2])
-                ];
-            } elseif (!empty($trimmed)) {
-                // Si ce n'est pas un pattern label:valeur et qu'on a des données, fermer la section
-                if (!empty($dataLines)) {
-                    $result[] = format_data_section($sectionTitle, $dataLines);
-                    $dataLines = [];
-                    $sectionTitle = '';
-                }
-                $inDataSection = false;
-                $result[] = $line;
-            }
-        } else {
-            // Vérifier si la ligne suivante pourrait être un séparateur
-            // Si cette ligne ressemble à un titre (se termine par ":"), la garder en attente
-            if (preg_match('/^[^:]+:\s*$/', $trimmed)) {
-                $pendingTitle = trim(rtrim($trimmed, ':'));
-            } else {
-                $pendingTitle = '';
-            }
-            $result[] = $line;
-        }
-    }
-    
-    // Fermer la dernière section si elle existe
-    if ($inDataSection && !empty($dataLines)) {
-        $result[] = format_data_section($sectionTitle, $dataLines);
-    }
-    
-    return implode("\n", $result);
-}
-
-/**
- * Formate une section de données en HTML structuré
- */
-function format_data_section(string $title, array $dataLines): string
-{
-    if (empty($dataLines)) {
-        return '';
-    }
-    
-    $html = '<div style="margin: 24px 0; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef; overflow: hidden;">';
-    
-    // Titre de la section
-    if (!empty($title)) {
-        $html .= '<div style="background-color: #667eea; padding: 16px 20px; border-bottom: 1px solid #e9ecef;">';
-        $html .= '<h3 style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif;">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h3>';
-        $html .= '</div>';
-    }
-    
-    // Tableau des données
-    $html .= '<table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #ffffff;">';
-    
-    foreach ($dataLines as $index => $data) {
-        $bgColor = ($index % 2 === 0) ? '#ffffff' : '#f8f9fa';
-        $html .= '<tr style="background-color: ' . $bgColor . ';">';
-        $html .= '<td style="padding: 14px 20px; border-bottom: 1px solid #e9ecef; font-weight: 600; color: #4a5568; width: 40%; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif; font-size: 14px;">';
-        $html .= htmlspecialchars($data['label'], ENT_QUOTES, 'UTF-8');
-        $html .= '</td>';
-        $html .= '<td style="padding: 14px 20px; border-bottom: 1px solid #e9ecef; color: #2d3748; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif; font-size: 14px;">';
-        $html .= htmlspecialchars($data['value'], ENT_QUOTES, 'UTF-8');
-        $html .= '</td>';
-        $html .= '</tr>';
-    }
-    
-    $html .= '</table>';
-    $html .= '</div>';
-    
-    return $html;
-}
-
-/**
  * Convertit un message texte en HTML avec mise en forme
  */
 function convert_text_to_html(string $text): string
 {
-    // D'abord, formater les données structurées (cela retourne du HTML)
-    $text = format_structured_data($text);
+    // Échapper le HTML pour la sécurité
+    $html = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
     
-    // Séparer le contenu HTML déjà formaté du texte brut
-    // Utiliser un marqueur temporaire pour protéger le HTML
-    $marker = '___HTML_SECTION___';
-    $htmlSections = [];
-    $counter = 0;
+    // Convertir les sauts de ligne doubles en paragraphes
+    $paragraphs = preg_split('/\n\s*\n/', $html);
+    $formattedParagraphs = [];
     
-    // Remplacer les sections HTML par des marqueurs
-    $text = preg_replace_callback('/(<div[^>]*>.*?<\/div>)/s', function($matches) use (&$htmlSections, &$counter, $marker) {
-        $key = $marker . $counter . $marker;
-        $htmlSections[$counter] = $matches[1];
-        $counter++;
-        return $key;
-    }, $text);
-    
-    // Maintenant, convertir le texte restant en HTML
-    $text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
-    
-    // Restaurer les sections HTML
-    foreach ($htmlSections as $index => $htmlSection) {
-        $text = str_replace($marker . $index . $marker, $htmlSection, $text);
-    }
-    
-    // Convertir les sauts de ligne doubles en paragraphes (mais pas dans les sections HTML)
-    $parts = preg_split('/(<div[^>]*>.*?<\/div>)/s', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
-    $result = [];
-    
-    foreach ($parts as $part) {
-        if (preg_match('/^<div/', $part)) {
-            // C'est du HTML déjà formaté, le garder tel quel
-            $result[] = $part;
-        } else {
-            // C'est du texte, le formater
-            $part = trim($part);
-            if (empty($part)) {
-                continue;
-            }
-            
-            // Convertir les sauts de ligne doubles en séparateurs de paragraphes
-            $paragraphs = preg_split('/\n\s*\n/', $part);
-            $formattedParagraphs = [];
-            
-            foreach ($paragraphs as $para) {
-                $para = trim($para);
-                if (!empty($para)) {
-                    // Convertir les sauts de ligne simples en <br>
-                    $para = nl2br($para);
-                    // Appliquer les styles de formatage markdown
-                    $para = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #2d3748; font-weight: 600;">$1</strong>', $para);
-                    $para = preg_replace('/\*(.+?)\*/', '<em style="color: #4a5568; font-style: italic;">$1</em>', $para);
-                    // Mettre le paragraphe dans un <p> stylé
-                    $formattedParagraphs[] = '<p style="margin: 0 0 16px 0; color: #2d3748; line-height: 1.75;">' . $para . '</p>';
-                }
-            }
-            
-            if (!empty($formattedParagraphs)) {
-                $result[] = implode('', $formattedParagraphs);
-            } elseif (!empty($part)) {
-                // Si pas de paragraphes, traiter comme texte simple
-                $part = nl2br($part);
-                $part = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #2d3748; font-weight: 600;">$1</strong>', $part);
-                $part = preg_replace('/\*(.+?)\*/', '<em style="color: #4a5568; font-style: italic;">$1</em>', $part);
-                $result[] = '<p style="margin: 0 0 16px 0; color: #2d3748; line-height: 1.75;">' . $part . '</p>';
-            }
+    foreach ($paragraphs as $para) {
+        $para = trim($para);
+        if (!empty($para)) {
+            // Convertir les sauts de ligne simples en <br>
+            $para = nl2br($para);
+            // Appliquer les styles de formatage markdown
+            $para = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #2d3748; font-weight: 600;">$1</strong>', $para);
+            $para = preg_replace('/\*(.+?)\*/', '<em style="color: #4a5568; font-style: italic;">$1</em>', $para);
+            // Mettre le paragraphe dans un <p> stylé
+            $formattedParagraphs[] = '<p style="margin: 0 0 16px 0; color: #2d3748; line-height: 1.75;">' . $para . '</p>';
         }
     }
     
-    $output = implode('', $result);
-    
-    // Si aucun contenu n'a été généré, retourner un paragraphe vide
-    if (empty(trim(strip_tags($output)))) {
-        return '<p style="margin: 0 0 16px 0; color: #2d3748; line-height: 1.75;">&nbsp;</p>';
+    // Si aucun paragraphe n'a été créé (texte sans sauts de ligne doubles), traiter comme un seul paragraphe
+    if (empty($formattedParagraphs)) {
+        $html = nl2br($html);
+        $html = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #2d3748; font-weight: 600;">$1</strong>', $html);
+        $html = preg_replace('/\*(.+?)\*/', '<em style="color: #4a5568; font-style: italic;">$1</em>', $html);
+        return '<p style="margin: 0 0 16px 0; color: #2d3748; line-height: 1.75;">' . $html . '</p>';
     }
     
-    return $output;
+    return implode('', $formattedParagraphs);
 }
 
 /**
@@ -528,8 +355,8 @@ function send_email_to_student(string $to, string $subject, string $message, boo
         error_log("ATTENTION: Une pièce jointe PDF était prévue mais ne peut pas être envoyée avec mail() natif. Utilisez PHPMailer pour les pièces jointes.");
     }
     
-    $headers = "From: scolarite@uae.ma\r\n";
-    $headers .= "Reply-To: scolarite@uae.ac.ma\r\n";
+    $headers = "From: scolarite@univ.ma\r\n";
+    $headers .= "Reply-To: scolarite@univ.ma\r\n";
     $headers .= "MIME-Version: 1.0\r\n";
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     $headers .= "X-Mailer: PHP/" . phpversion();

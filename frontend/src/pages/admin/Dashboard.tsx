@@ -4,6 +4,7 @@ import { StatsCard } from "@/components/admin/StatsCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Clock, CheckCircle, XCircle, MessageSquare } from "lucide-react";
 import { documentTypeLabels, DocumentType } from "@/types";
+import { DocumentTypeBarChart, StatusPieChart, ComplaintsStatusPieChart } from "@/components/admin/ChartComponents";
 
 export default function AdminDashboard() {
   const { requests, complaints } = useApp();
@@ -141,6 +142,20 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+        </div>
+
+        {/* Charts Section */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <DocumentTypeBarChart data={byType} />
+          <StatusPieChart
+            pending={stats.pending}
+            accepted={stats.accepted}
+            rejected={stats.rejected}
+          />
+          <ComplaintsStatusPieChart
+            pending={stats.pendingComplaints}
+            resolved={stats.resolvedComplaints}
+          />
         </div>
       </div>
     </AdminLayout>

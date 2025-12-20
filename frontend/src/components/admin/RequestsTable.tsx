@@ -234,6 +234,17 @@ export function RequestsTable({
                                     )}
                                     Télécharger
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => handleSendEmail(request)}
+                                    disabled={sendingEmail === request.id}
+                                  >
+                                    {sendingEmail === request.id ? (
+                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Mail className="mr-2 h-4 w-4" />
+                                    )}
+                                    Envoyer le document
+                                  </DropdownMenuItem>
                                 </>
                               )}
                             </>

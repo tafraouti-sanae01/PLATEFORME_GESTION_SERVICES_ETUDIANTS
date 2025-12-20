@@ -1,7 +1,6 @@
 import { useApp } from "@/contexts/AppContext";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { StatsCard } from "@/components/admin/StatsCard";
-import { RequestsTable } from "@/components/admin/RequestsTable";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Clock, CheckCircle, XCircle, MessageSquare } from "lucide-react";
 import { documentTypeLabels, DocumentType } from "@/types";
@@ -15,16 +14,18 @@ export default function AdminDashboard() {
     accepted: requests.filter((r) => r.status === "accepted").length,
     rejected: requests.filter((r) => r.status === "rejected").length,
     pendingComplaints: complaints.filter((c) => c.status === "pending").length,
+    resolvedComplaints: complaints.filter((c) => c.status === "resolved").length,
   };
 
   const pendingPercentage = stats.total > 0 ? Math.round((stats.pending / stats.total) * 100) : 0;
   const acceptedPercentage = stats.total > 0 ? Math.round((stats.accepted / stats.total) * 100) : 0;
   const rejectedPercentage = stats.total > 0 ? Math.round((stats.rejected / stats.total) * 100) : 0;
 
-  const recentPendingRequests = requests
-    .filter((r) => r.documentType !== "reclamation" && r.status === "pending")
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
+  const totalComplaints = complaints.length;
+  const pendingComplaintsPercentage = totalComplaints > 0 ? Math.round((stats.pendingComplaints / totalComplaints) * 100) : 0;
+  const resolvedComplaintsPercentage = totalComplaints > 0 ? Math.round((stats.resolvedComplaints / totalComplaints) * 100) : 0;
+
+
 
   // Filter out reclamations from document requests
   const documentRequests = requests.filter((r) => r.documentType !== "reclamation");
@@ -40,7 +41,7 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div>
           <h1 className="font-display text-3xl font-bold text-foreground">Dashboard</h1>
@@ -49,62 +50,67 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <StatsCard
-            title="Total Demandes"
-            value={stats.total}
-            icon={<FileText className="h-6 w-6" />}
-            variant="primary"
-          />
-          <StatsCard
-            title="En attente"
-            value={stats.pending}
-            description={`${pendingPercentage}%`}
-            icon={<Clock className="h-6 w-6" />}
-            variant="warning"
-          />
-          <StatsCard
-            title="Acceptées"
-            value={stats.accepted}
-            description={`${acceptedPercentage}%`}
-            icon={<CheckCircle className="h-6 w-6" />}
-            variant="success"
-          />
-          <StatsCard
-            title="Refusées"
-            value={stats.rejected}
-            description={`${rejectedPercentage}%`}
-            icon={<XCircle className="h-6 w-6" />}
-            variant="destructive"
-          />
-          <StatsCard
-            title="Réclamations"
-            value={stats.pendingComplaints}
-            description="en attente"
-            icon={<MessageSquare className="h-6 w-6" />}
-            variant="default"
-          />
-        </div>
-
-        {/* Content Grid */}
+        {/* Main Layout Grid */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Recent Pending Requests */}
-          <div className="lg:col-span-2">
-            <Card className="shadow-elegant">
-              <CardHeader>
-                <CardTitle className="font-display">Demandes en attente</CardTitle>
-                <CardDescription>
-                  Les dernières demandes nécessitant une action
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <RequestsTable requests={recentPendingRequests} />
-              </CardContent>
-            </Card>
+          {/* Left Side - Stats Cards */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Request Stats Grid */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <StatsCard
+                title="Total Demandes"
+                value={stats.total}
+                icon={<FileText className="h-6 w-6" />}
+                variant="primary"
+              />
+              <StatsCard
+                title="En attente"
+                value={stats.pending}
+                description={`${pendingPercentage}%`}
+                icon={<Clock className="h-6 w-6" />}
+                variant="warning"
+              />
+              <StatsCard
+                title="Acceptées"
+                value={stats.accepted}
+                description={`${acceptedPercentage}%`}
+                icon={<CheckCircle className="h-6 w-6" />}
+                variant="success"
+              />
+              <StatsCard
+                title="Refusées"
+                value={stats.rejected}
+                description={`${rejectedPercentage}%`}
+                icon={<XCircle className="h-6 w-6" />}
+                variant="destructive"
+              />
+            </div>
+
+            {/* Complaint Stats Grid */}
+            <div className="grid gap-4 md:grid-cols-3">
+              <StatsCard
+                title="Total Réclamations"
+                value={complaints.length}
+                icon={<MessageSquare className="h-6 w-6" />}
+                variant="primary"
+              />
+              <StatsCard
+                title="Réclamations"
+                value={stats.pendingComplaints}
+                description={`${pendingComplaintsPercentage}%`}
+                icon={<MessageSquare className="h-6 w-6" />}
+                variant="warning"
+              />
+              <StatsCard
+                title="Réclamations"
+                value={stats.resolvedComplaints}
+                description={`${resolvedComplaintsPercentage}%`}
+                icon={<MessageSquare className="h-6 w-6" />}
+                variant="success"
+              />
+            </div>
           </div>
 
-          {/* Document Type Distribution */}
+          {/* Right Side - Document Type Distribution */}
           <div>
             <Card className="shadow-elegant">
               <CardHeader>

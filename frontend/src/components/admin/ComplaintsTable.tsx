@@ -24,6 +24,12 @@ import { Complaint, documentTypeLabels } from "@/types";
 import { useApp } from "@/contexts/AppContext";
 import { toast } from "sonner";
 import { Eye, Send, Loader2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getComplaintDetails, type ComplaintDetails } from "@/lib/api";
 import { useEffect } from "react";
 import { TablePagination } from "./TablePagination";
@@ -35,7 +41,7 @@ interface ComplaintsTableProps {
   itemsPerPage?: number;
 }
 
-export function ComplaintsTable({ 
+export function ComplaintsTable({
   complaints,
   enablePagination = false,
   itemsPerPage = 10,
@@ -147,15 +153,22 @@ export function ComplaintsTable({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleViewDetails(complaint)}
-                      className="gap-2"
-                    >
-                      <Eye className="h-4 w-4" />
-                      Voir
-                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleViewDetails(complaint)}
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span className="sr-only">Voir détails</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Voir détails</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                 </TableRow>
               ))
@@ -247,15 +260,15 @@ export function ComplaintsTable({
                             complaintDetails.relatedRequest.status === "pending"
                               ? "bg-warning/10 text-warning border-warning/20"
                               : complaintDetails.relatedRequest.status === "accepted"
-                              ? "bg-success/10 text-success border-success/20"
-                              : "bg-muted"
+                                ? "bg-success/10 text-success border-success/20"
+                                : "bg-muted"
                           }
                         >
                           {complaintDetails.relatedRequest.status === "pending"
                             ? "En attente"
                             : complaintDetails.relatedRequest.status === "accepted"
-                            ? "Traitée"
-                            : complaintDetails.relatedRequest.status}
+                              ? "Traitée"
+                              : complaintDetails.relatedRequest.status}
                         </Badge>
                       </div>
                       <div>

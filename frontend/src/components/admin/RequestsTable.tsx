@@ -11,12 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 import { DocumentRequest, documentTypeLabels, statusLabels } from "@/types";
 import { useApp } from "@/contexts/AppContext";
 import { sendEmailToStudent, downloadDocument } from "@/lib/api";
@@ -24,12 +19,17 @@ import { toast } from "sonner";
 import {
   CheckCircle,
   XCircle,
-  Mail,
   Download,
-  MoreHorizontal,
   Eye,
   Loader2,
+  Mail,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -57,8 +57,8 @@ const statusColors = {
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
-export function RequestsTable({ 
-  requests, 
+export function RequestsTable({
+  requests,
   showActions = true,
   enablePagination = false,
   itemsPerPage = 10,
@@ -201,102 +201,167 @@ export function RequestsTable({
                   </TableCell>
                   {(showActions || historyMode) && (
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover z-50">
+                      <TooltipProvider delayDuration={0}>
+                        <div className="flex items-center justify-end gap-1">
                           {historyMode ? (
-                            // Mode historique: options selon le statut
                             <>
-                              {request.status === "rejected" && (
-                                <DropdownMenuItem onClick={() => setSelectedRequest(request)}>
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  Voir détails
-                                </DropdownMenuItem>
+                              {(request.status === "rejected" || request.status === "accepted") && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setSelectedRequest(request)}
+                                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                      <span className="sr-only">Voir détails</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Voir détails</TooltipContent>
+                                </Tooltip>
                               )}
+
                               {request.status === "accepted" && (
                                 <>
-                                  <DropdownMenuItem onClick={() => setSelectedRequest(request)}>
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    Voir détails
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDownload(request)}
-                                    disabled={downloading === request.id}
-                                  >
-                                    {downloading === request.id ? (
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Download className="mr-2 h-4 w-4" />
-                                    )}
-                                    Télécharger
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleSendEmail(request)}
-                                    disabled={sendingEmail === request.id}
-                                  >
-                                    {sendingEmail === request.id ? (
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Mail className="mr-2 h-4 w-4" />
-                                    )}
-                                    Envoyer le document
-                                  </DropdownMenuItem>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDownload(request)}
+                                        disabled={downloading === request.id}
+                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                      >
+                                        {downloading === request.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Download className="h-4 w-4" />
+                                        )}
+                                        <span className="sr-only">Télécharger</span>
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Télécharger</TooltipContent>
+                                  </Tooltip>
+
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleSendEmail(request)}
+                                        disabled={sendingEmail === request.id}
+                                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                      >
+                                        {sendingEmail === request.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Mail className="h-4 w-4" />
+                                        )}
+                                        <span className="sr-only">Envoyer le document</span>
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Envoyer le document</TooltipContent>
+                                  </Tooltip>
                                 </>
                               )}
                             </>
                           ) : (
-                            // Mode normal: toutes les actions
                             <>
-                              <DropdownMenuItem onClick={() => setSelectedRequest(request)}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                Voir détails
-                              </DropdownMenuItem>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setSelectedRequest(request)}
+                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                    <span className="sr-only">Voir détails</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Voir détails</TooltipContent>
+                              </Tooltip>
+
                               {request.status === "pending" && (
                                 <>
-                                  <DropdownMenuItem onClick={() => handleAccept(request.id)}>
-                                    <CheckCircle className="mr-2 h-4 w-4 text-success" />
-                                    Valider
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleRejectClick(request)}>
-                                    <XCircle className="mr-2 h-4 w-4 text-destructive" />
-                                    Refuser
-                                  </DropdownMenuItem>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleAccept(request.id)}
+                                        className="h-8 w-8 text-success hover:text-success hover:bg-success/10"
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                        <span className="sr-only">Valider</span>
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Valider</TooltipContent>
+                                  </Tooltip>
+
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleRejectClick(request)}
+                                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                        <span className="sr-only">Refuser</span>
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Refuser</TooltipContent>
+                                  </Tooltip>
                                 </>
                               )}
-                              {/* Cacher le bouton "Envoyer email" si la demande est acceptée ou refusée (email déjà envoyé automatiquement) */}
-                              {/* Email button replaced by Download button as requested */}
-                              <DropdownMenuItem 
-                                onClick={() => handleDownload(request)}
-                                disabled={downloading === request.id}
-                              >
-                                {downloading === request.id ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Download className="mr-2 h-4 w-4" />
-                                )}
-                                Télécharger
-                              </DropdownMenuItem>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDownload(request)}
+                                    disabled={downloading === request.id}
+                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                  >
+                                    {downloading === request.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4" />
+                                    )}
+                                    <span className="sr-only">Télécharger</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Télécharger</TooltipContent>
+                              </Tooltip>
+
                               {request.status === "accepted" && (
-                                <DropdownMenuItem 
-                                  onClick={() => handleDownload(request)}
-                                  disabled={downloading === request.id}
-                                >
-                                  {downloading === request.id ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Download className="mr-2 h-4 w-4" />
-                                  )}
-                                  Télécharger
-                                </DropdownMenuItem>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleDownload(request)}
+                                      disabled={downloading === request.id}
+                                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                    >
+                                      {downloading === request.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Download className="h-4 w-4" />
+                                      )}
+                                      <span className="sr-only">Télécharger</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Télécharger (Copie)</TooltipContent>
+                                </Tooltip>
                               )}
                             </>
                           )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        </div>
+                      </TooltipProvider>
                     </TableCell>
                   )}
                 </TableRow>

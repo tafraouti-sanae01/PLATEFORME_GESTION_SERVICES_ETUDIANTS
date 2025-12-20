@@ -1029,6 +1029,8 @@ SQL;
     }
 
     // Vérifier que la demande est acceptée
+    // MODIFICATION: Autoriser le téléchargement pour tous les statuts (demande admin)
+    /*
     if ($request['statut'] !== 'traite') {
         while (ob_get_level() > 0) {
             ob_end_clean();
@@ -1037,6 +1039,7 @@ SQL;
         header('Content-Type: text/plain');
         die('Document not ready. Request must be accepted first.');
     }
+    */
 
     // Générer le HTML du document selon le type
     $documentType = map_document_type($request['type_document']);

@@ -132,10 +132,13 @@ export function RequestsTable({
   };
 
   const handleDownload = async (request: DocumentRequest) => {
+    // Check removed to allow download for all statuses as requested
+    /*
     if (request.status !== "accepted") {
       toast.error("Le document n'est disponible qu'après acceptation de la demande");
       return;
     }
+    */
 
     setDownloading(request.id);
     try {
@@ -254,19 +257,18 @@ export function RequestsTable({
                                 </>
                               )}
                               {/* Cacher le bouton "Envoyer email" si la demande est acceptée ou refusée (email déjà envoyé automatiquement) */}
-                              {request.status !== "accepted" && request.status !== "rejected" && (
-                                <DropdownMenuItem 
-                                  onClick={() => handleSendEmail(request)}
-                                  disabled={sendingEmail === request.id}
-                                >
-                                  {sendingEmail === request.id ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Mail className="mr-2 h-4 w-4" />
-                                  )}
-                                  Envoyer un email
-                                </DropdownMenuItem>
-                              )}
+                              {/* Email button replaced by Download button as requested */}
+                              <DropdownMenuItem 
+                                onClick={() => handleDownload(request)}
+                                disabled={downloading === request.id}
+                              >
+                                {downloading === request.id ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Download className="mr-2 h-4 w-4" />
+                                )}
+                                Télécharger
+                              </DropdownMenuItem>
                               {request.status === "accepted" && (
                                 <DropdownMenuItem 
                                   onClick={() => handleDownload(request)}

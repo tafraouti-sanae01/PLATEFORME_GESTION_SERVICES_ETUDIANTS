@@ -95,17 +95,17 @@ export default function AdminDashboard() {
                 variant="primary"
               />
               <StatsCard
-                title="Réclamations"
+                title="En attente"
                 value={stats.pendingComplaints}
                 description={`${pendingComplaintsPercentage}%`}
-                icon={<MessageSquare className="h-6 w-6" />}
+                icon={<Clock className="h-6 w-6" />}
                 variant="warning"
               />
               <StatsCard
-                title="Réclamations"
+                title="Résolues"
                 value={stats.resolvedComplaints}
                 description={`${resolvedComplaintsPercentage}%`}
-                icon={<MessageSquare className="h-6 w-6" />}
+                icon={<CheckCircle className="h-6 w-6" />}
                 variant="success"
               />
             </div>

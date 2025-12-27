@@ -18,16 +18,26 @@ function get_email_header(): string
 {
     return '
     <tr>
-        <td class="header-gradient" style="background-color: #667eea; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 40px 30px 40px; border-radius: 8px 8px 0 0;">
-            <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <td style="background-color: #f8f9fa; padding: 30px 40px; border-bottom: 1px solid #e9ecef;">
+            <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
                 <tr>
-                    <td style="text-align: center;">
-                        <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif;">
-                            Service Scolarité
-                        </h1>
-                        <p style="margin: 10px 0 0 0; color: #ffffff; opacity: 0.95; font-size: 14px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif;">
-                            Plateforme de Gestion des Services Étudiants
-                        </p>
+                    <td align="center" style="padding: 0;">
+                        <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+                            <tr>
+                                <td align="center" style="padding: 0 0 8px 0;">
+                                    <span style="color: #212529; font-size: 24px; font-weight: 600; font-family: Arial, sans-serif; line-height: 1.2;">
+                                        Service Scolarité
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td align="center" style="padding: 0;">
+                                    <span style="color: #6c757d; font-size: 14px; font-weight: 400; font-family: Arial, sans-serif; line-height: 1.4;">
+                                        Plateforme de Gestion des Services Étudiants
+                                    </span>
+                                </td>
+                            </tr>
+                        </table>
                     </td>
                 </tr>
             </table>
@@ -43,16 +53,20 @@ function get_email_footer(): string
     $currentYear = date('Y');
     return '
     <tr>
-        <td style="padding: 30px 40px; background-color: #f8f9fa; border-top: 1px solid #e9ecef; border-radius: 0 0 8px 8px;">
-            <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <td style="padding: 25px 40px; background-color: #f8f9fa; border-top: 1px solid #e9ecef;">
+            <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
                 <tr>
-                    <td style="text-align: center; padding: 0;">
-                        <p style="margin: 0 0 12px 0; color: #6c757d; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif; font-size: 13px; line-height: 1.5;">
+                    <td align="center" style="padding: 0 0 10px 0;">
+                        <span style="color: #6c757d; font-size: 13px; font-family: Arial, sans-serif; line-height: 1.6;">
                             Cet email a été envoyé automatiquement. Merci de ne pas y répondre directement.
-                        </p>
-                        <p style="margin: 0; color: #adb5bd; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif; font-size: 12px; line-height: 1.5;">
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="center" style="padding: 0;">
+                        <span style="color: #adb5bd; font-size: 12px; font-family: Arial, sans-serif; line-height: 1.5;">
                             © ' . $currentYear . ' Service Scolarité - Tous droits réservés.
-                        </p>
+                        </span>
                     </td>
                 </tr>
             </table>
@@ -61,12 +75,133 @@ function get_email_footer(): string
 }
 
 /**
+ * Crée une boîte bien visible pour les réponses des administrateurs
+ */
+function format_admin_response(string $response): string
+{
+    $response = htmlspecialchars(trim($response), ENT_QUOTES, 'UTF-8');
+    $response = nl2br($response);
+    
+    return '
+    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 24px 0;">
+        <tr>
+            <td style="background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 20px;">
+                <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 0 0 12px 0;">
+                            <span style="color: #495057; font-size: 14px; font-weight: 600; font-family: Arial, sans-serif;">
+                                Réponse du Service Scolarité :
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0;">
+                            <span style="color: #212529; font-size: 15px; line-height: 1.7; font-family: Arial, sans-serif;">
+                                ' . $response . '
+                            </span>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>';
+}
+
+/**
+ * Formate un message avec une réponse d'administrateur en HTML
+ * Utilisez cette fonction pour créer des emails avec des réponses bien visibles
+ */
+function format_message_with_response(string $introText, string $responseText, string $closingText = ''): string
+{
+    $intro = convert_text_to_html($introText);
+    $response = format_admin_response($responseText);
+    $closing = !empty($closingText) ? convert_text_to_html($closingText) : '';
+    
+    return $intro . $response . $closing;
+}
+
+/**
+ * Crée un tableau HTML pour afficher les détails d'une demande
+ * Utilise les couleurs de la plateforme (bleu)
+ */
+function format_request_details_table(array $details): string
+{
+    // Couleurs de la plateforme (dérivées du bleu)
+    $headerBg = '#1a4a6b'; // navy (205 75% 22%)
+    $headerText = '#ffffff';
+    $rowBg = '#f8f9fa';
+    $rowAltBg = '#ffffff';
+    $borderColor = '#c5d4e0'; // blue-pale
+    $labelColor = '#0d2a3d'; // navy-dark
+    $valueColor = '#212529';
+    
+    $html = '<table width="500" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 20px 0; border: 1px solid ' . $borderColor . ';">';
+    
+    // En-tête du tableau
+    $html .= '<tr>';
+    $html .= '<td style="background-color: ' . $headerBg . '; padding: 12px 16px; border-bottom: 2px solid ' . $borderColor . ';">';
+    $html .= '<span style="color: ' . $headerText . '; font-size: 15px; font-weight: 600; font-family: Arial, sans-serif;">Détails de votre demande</span>';
+    $html .= '</td>';
+    $html .= '</tr>';
+    
+    // Lignes de données
+    $isAlt = false;
+    foreach ($details as $label => $value) {
+        $bgColor = $isAlt ? $rowAltBg : $rowBg;
+        $html .= '<tr>';
+        $html .= '<td style="background-color: ' . $bgColor . '; padding: 12px 16px; border-bottom: 1px solid ' . $borderColor . ';">';
+        $html .= '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">';
+        $html .= '<tr>';
+        $html .= '<td width="40%" style="padding: 0 12px 0 0; vertical-align: top; border-right: 1px solid ' . $borderColor . ';">';
+        $html .= '<span style="color: ' . $labelColor . '; font-size: 14px; font-weight: 600; font-family: Arial, sans-serif;">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</span>';
+        $html .= '</td>';
+        $html .= '<td width="60%" style="padding: 0 0 0 12px; vertical-align: top;">';
+        $html .= '<span style="color: ' . $valueColor . '; font-size: 14px; font-family: Arial, sans-serif;">' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '</span>';
+        $html .= '</td>';
+        $html .= '</tr>';
+        $html .= '</table>';
+        $html .= '</td>';
+        $html .= '</tr>';
+        $isAlt = !$isAlt;
+    }
+    
+    $html .= '</table>';
+    
+    return $html;
+}
+
+/**
  * Convertit un message texte en HTML avec mise en forme
  */
 function convert_text_to_html(string $text): string
 {
+    // Détecter si le message contient une réponse d'administrateur
+    // Patterns courants pour identifier les réponses
+    $responsePatterns = [
+        '/Notre réponse\s*:\s*\n(.+?)(?=\n\n|$)/s',
+        '/Raisons du refus\s*:\s*\n(.+?)(?=\n\n|$)/s',
+        '/Réponse\s*:\s*\n(.+?)(?=\n\n|$)/s',
+    ];
+    
+    $hasResponse = false;
+    $responseText = '';
+    $mainText = $text;
+    
+    // Chercher une réponse dans le texte
+    foreach ($responsePatterns as $pattern) {
+        if (preg_match($pattern, $text, $matches)) {
+            $hasResponse = true;
+            $responseText = trim($matches[1]);
+            // Retirer la réponse du texte principal (y compris le label)
+            $mainText = preg_replace($pattern, '', $text);
+            // Nettoyer les sauts de ligne multiples
+            $mainText = preg_replace('/\n{3,}/', "\n\n", $mainText);
+            break;
+        }
+    }
+    
     // Échapper le HTML pour la sécurité
-    $html = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+    $html = htmlspecialchars($mainText, ENT_QUOTES, 'UTF-8');
     
     // Convertir les sauts de ligne doubles en paragraphes
     $paragraphs = preg_split('/\n\s*\n/', $html);
@@ -78,22 +213,29 @@ function convert_text_to_html(string $text): string
             // Convertir les sauts de ligne simples en <br>
             $para = nl2br($para);
             // Appliquer les styles de formatage markdown
-            $para = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #2d3748; font-weight: 600;">$1</strong>', $para);
-            $para = preg_replace('/\*(.+?)\*/', '<em style="color: #4a5568; font-style: italic;">$1</em>', $para);
-            // Mettre le paragraphe dans un <p> stylé
-            $formattedParagraphs[] = '<p style="margin: 0 0 16px 0; color: #2d3748; line-height: 1.75;">' . $para . '</p>';
+            $para = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #212529; font-weight: 600;">$1</strong>', $para);
+            $para = preg_replace('/\*(.+?)\*/', '<em style="color: #495057; font-style: italic;">$1</em>', $para);
+            // Mettre le paragraphe dans un tableau (compatible email)
+            $formattedParagraphs[] = '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 16px 0;"><tr><td style="padding: 0; color: #212529; line-height: 1.7; font-size: 15px; font-family: Arial, sans-serif;">' . $para . '</td></tr></table>';
         }
     }
     
     // Si aucun paragraphe n'a été créé (texte sans sauts de ligne doubles), traiter comme un seul paragraphe
     if (empty($formattedParagraphs)) {
         $html = nl2br($html);
-        $html = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #2d3748; font-weight: 600;">$1</strong>', $html);
-        $html = preg_replace('/\*(.+?)\*/', '<em style="color: #4a5568; font-style: italic;">$1</em>', $html);
-        return '<p style="margin: 0 0 16px 0; color: #2d3748; line-height: 1.75;">' . $html . '</p>';
+        $html = preg_replace('/\*\*(.+?)\*\*/', '<strong style="color: #212529; font-weight: 600;">$1</strong>', $html);
+        $html = preg_replace('/\*(.+?)\*/', '<em style="color: #495057; font-style: italic;">$1</em>', $html);
+        $formattedParagraphs[] = '<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 16px 0;"><tr><td style="padding: 0; color: #212529; line-height: 1.7; font-size: 15px; font-family: Arial, sans-serif;">' . $html . '</td></tr></table>';
     }
     
-    return implode('', $formattedParagraphs);
+    $result = implode('', $formattedParagraphs);
+    
+    // Ajouter la boîte de réponse si une réponse a été détectée
+    if ($hasResponse && !empty($responseText)) {
+        $result .= format_admin_response($responseText);
+    }
+    
+    return $result;
 }
 
 /**
@@ -101,8 +243,10 @@ function convert_text_to_html(string $text): string
  */
 function create_email_template(string $content, bool $isHtml = false): string
 {
-    // Si le contenu est déjà en HTML, l'utiliser tel quel, sinon le convertir
-    $bodyContent = $isHtml ? $content : convert_text_to_html($content);
+    // Si le contenu est déjà en HTML (contient des balises HTML), l'utiliser tel quel
+    // Sinon, le convertir même si isHtml = true (car les messages sont souvent en texte brut)
+    $isActuallyHtml = $isHtml && (strip_tags($content) !== $content);
+    $bodyContent = $isActuallyHtml ? $content : convert_text_to_html($content);
     
     $header = get_email_header();
     $footer = get_email_footer();
@@ -115,110 +259,27 @@ function create_email_template(string $content, bool $isHtml = false): string
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Email Service Scolarité</title>
-    <style type="text/css">
-        /* Styles pour améliorer la compatibilité email */
-        body, table, td, p, a, li, blockquote {
-            -webkit-text-size-adjust: 100%;
-            -ms-text-size-adjust: 100%;
-        }
-        table, td {
-            mso-table-lspace: 0pt;
-            mso-table-rspace: 0pt;
-        }
-        img {
-            -ms-interpolation-mode: bicubic;
-            border: 0;
-            height: auto;
-            line-height: 100%;
-            outline: none;
-            text-decoration: none;
-        }
-        /* Styles pour les liens */
-        a {
-            color: #667eea;
-            text-decoration: none;
-        }
-        a:hover {
-            color: #764ba2;
-            text-decoration: underline;
-        }
-        /* Styles pour les listes */
-        ul, ol {
-            margin: 0 0 16px 0;
-            padding-left: 24px;
-        }
-        li {
-            margin: 0 0 8px 0;
-            color: #2d3748;
-            line-height: 1.75;
-        }
-        /* Styles pour les tableaux */
-        table {
-            border-collapse: collapse;
-            mso-table-lspace: 0pt;
-            mso-table-rspace: 0pt;
-        }
-        /* Styles pour les tableaux dans le contenu */
-        .email-content table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 16px 0;
-        }
-        .email-content th, .email-content td {
-            padding: 12px;
-            border: 1px solid #e9ecef;
-            text-align: left;
-        }
-        .email-content th {
-            background-color: #f8f9fa;
-            font-weight: 600;
-            color: #2d3748;
-        }
-        /* Styles pour les citations */
-        blockquote {
-            margin: 16px 0;
-            padding: 12px 16px;
-            border-left: 4px solid #667eea;
-            background-color: #f7fafc;
-            color: #4a5568;
-        }
-    </style>
     <!--[if mso]>
     <style type="text/css">
-        body, table, td, a { font-family: Arial, sans-serif !important; }
-        .header-gradient {
-            background: #667eea !important;
-        }
+        body, table, td { font-family: Arial, sans-serif !important; }
     </style>
     <![endif]-->
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif; background-color: #f5f7fa; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;">
-    <!-- Wrapper -->
-    <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f7fa; padding: 20px 0;">
+<body style="margin: 0; padding: 0; background-color: #f5f5f5;">
+    <!-- Table principale centrée - 600px -->
+    <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; background-color: #f5f5f5;">
         <tr>
             <td align="center" style="padding: 20px 0;">
-                <!-- Main Container -->
-                <table role="presentation" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.06); overflow: hidden; border: 1px solid #e9ecef;">
+                <!-- Container principal - largeur fixe 600px -->
+                <table width="600" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; background-color: #ffffff; border: 1px solid #dee2e6;">
                     ' . $header . '
-                    <!-- Content -->
+                    <!-- Contenu principal -->
                     <tr>
-                        <td style="padding: 40px 40px 30px 40px; background-color: #ffffff;">
-                            <div class="email-content" style="color: #2d3748; font-size: 16px; line-height: 1.75; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif;">
-                                ' . $bodyContent . '
-                            </div>
+                        <td style="padding: 35px 40px; background-color: #ffffff;">
+                            ' . $bodyContent . '
                         </td>
                     </tr>
                     ' . $footer . '
-                </table>
-                <!-- Spacer -->
-                <table role="presentation" style="width: 100%; max-width: 600px; margin: 20px auto 0;">
-                    <tr>
-                        <td style="text-align: center; padding: 20px 0;">
-                            <p style="margin: 0; color: #a0aec0; font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, sans-serif;">
-                                Si vous avez des questions, contactez le service scolarité.
-                            </p>
-                        </td>
-                    </tr>
                 </table>
             </td>
         </tr>

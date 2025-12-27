@@ -205,14 +205,25 @@ SQL;
             // En production, vous pourriez avoir une colonne date_traitement
             $processedAt = $row['date_demande'];
         }
+        // Format dates properly - ensure ISO 8601 format with time
+        $createdAt = $row['date_demande'];
+        if ($createdAt && !str_contains($createdAt, 'T') && !str_contains($createdAt, ' ')) {
+            // If date is in YYYY-MM-DD format, add time
+            $createdAt = $createdAt . ' 00:00:00';
+        }
+        $processedAtFormatted = $processedAt;
+        if ($processedAtFormatted && !str_contains($processedAtFormatted, 'T') && !str_contains($processedAtFormatted, ' ')) {
+            $processedAtFormatted = $processedAtFormatted . ' 00:00:00';
+        }
+        
         return [
             'id' => $row['id_demande'],
             'referenceNumber' => $row['numero_reference'],
             'studentId' => $row['id_etudiant'],
             'documentType' => $documentType,
             'status' => map_status($row['statut']),
-            'createdAt' => $row['date_demande'],
-            'processedAt' => $processedAt,
+            'createdAt' => $createdAt,
+            'processedAt' => $processedAtFormatted,
             'academicYear' => $row['ar_annee'] ?? $row['rn_annee'],
             'semester' => $row['rn_semestre'],
             'companyName' => $row['nom_entreprise'],
@@ -338,7 +349,7 @@ function handle_create_request(PDO $pdo): void
     // Insérer les données spécifiques selon le type de document
     // Note: attestation_scolarite n'a pas de table dédiée, les données sont dans demandes uniquement
     
-    if ($input['documentType'] === 'attestation_reussite' && isset($input['academicYear'])) {
+    if ($input['documentType'] === 'attestation_reussite') {
         // Générer un ID unique pour l'attestation (format VARCHAR(10))
         $timestamp = substr((string)time(), -6);
         $random = rand(100, 999);
@@ -346,13 +357,16 @@ function handle_create_request(PDO $pdo): void
         $idAttestation = substr($idAttestation, 0, 10);
         
         // S'assurer que l'année universitaire est au bon format (YYYY-YYYY)
-        $academicYear = $input['academicYear'];
-        // Si le format est déjà YYYY-YYYY, l'utiliser tel quel
-        // Sinon, essayer de le convertir
-        if (!preg_match('/^\d{4}-\d{4}$/', $academicYear)) {
-            // Si c'est juste YYYY, créer YYYY-YYYY+1
-            if (preg_match('/^\d{4}$/', $academicYear)) {
-                $academicYear = $academicYear . '-' . ((int)$academicYear + 1);
+        $academicYear = null;
+        if (isset($input['academicYear']) && !empty(trim($input['academicYear']))) {
+            $academicYear = trim($input['academicYear']);
+            // Si le format est déjà YYYY-YYYY, l'utiliser tel quel
+            // Sinon, essayer de le convertir
+            if (!preg_match('/^\d{4}-\d{4}$/', $academicYear)) {
+                // Si c'est juste YYYY, créer YYYY-YYYY+1
+                if (preg_match('/^\d{4}$/', $academicYear)) {
+                    $academicYear = $academicYear . '-' . ((int)$academicYear + 1);
+                }
             }
         }
         
@@ -381,14 +395,20 @@ function handle_create_request(PDO $pdo): void
         
         // Formater l'année universitaire si fournie
         $academicYear = null;
-        if (isset($input['academicYear']) && !empty($input['academicYear'])) {
-            $academicYear = $input['academicYear'];
+        if (isset($input['academicYear']) && !empty(trim($input['academicYear']))) {
+            $academicYear = trim($input['academicYear']);
             // S'assurer que le format est YYYY-YYYY
             if (!preg_match('/^\d{4}-\d{4}$/', $academicYear)) {
                 if (preg_match('/^\d{4}$/', $academicYear)) {
                     $academicYear = $academicYear . '-' . ((int)$academicYear + 1);
                 }
             }
+        }
+        
+        // Formater le semestre si fourni
+        $semester = null;
+        if (isset($input['semester']) && !empty(trim($input['semester']))) {
+            $semester = trim($input['semester']);
         }
         
         try {
@@ -399,7 +419,7 @@ function handle_create_request(PDO $pdo): void
             $stmt->execute([
                 ':id' => $idReleve,
                 ':annee' => $academicYear,
-                ':semestre' => $input['semester'] ?? null,
+                ':semestre' => $semester,
                 ':demande' => $idDemande,
             ]);
         } catch (\PDOException $e) {
@@ -534,49 +554,71 @@ function handle_create_request(PDO $pdo): void
             
             // Construire le sujet et le message de l'email
             $subject = "Confirmation de votre demande de document - " . $referenceNumber;
-            $message = "Bonjour " . $student['prenom'] . " " . $student['nom'] . ",\n\n";
-            $message .= "Nous avons bien reçu votre demande de " . strtolower($docLabel) . ".\n\n";
-            $message .= "Détails de votre demande :\n";
-            $message .= "----------------------------------------\n";
-            $message .= "Numéro de référence : " . $referenceNumber . "\n";
-            $message .= "Type de document : " . $docLabel . "\n";
-            $message .= "Date de la demande : " . date('d/m/Y') . "\n";
+            
+            // Préparer les détails pour le tableau
+            $details = [
+                'Numéro de référence' => $referenceNumber,
+                'Type de document' => $docLabel,
+                'Date de la demande' => date('d/m/Y'),
+            ];
             
             // Ajouter les détails spécifiques selon le type de document
             if ($input['documentType'] === 'attestation_reussite' && isset($input['academicYear'])) {
-                $message .= "Année universitaire : " . $input['academicYear'] . "\n";
+                $details['Année universitaire'] = $input['academicYear'];
             }
             if ($input['documentType'] === 'releve_notes') {
                 if (isset($input['academicYear'])) {
-                    $message .= "Année universitaire : " . $input['academicYear'] . "\n";
+                    $details['Année universitaire'] = $input['academicYear'];
                 }
                 if (isset($input['semester'])) {
-                    $message .= "Semestre : " . $input['semester'] . "\n";
+                    $details['Semestre'] = $input['semester'];
                 }
             }
             if ($input['documentType'] === 'convention_stage') {
                 if (isset($input['companyName'])) {
-                    $message .= "Entreprise : " . $input['companyName'] . "\n";
+                    $details['Entreprise'] = $input['companyName'];
                 }
                 if (isset($input['stageSubject'])) {
-                    $message .= "Sujet du stage : " . $input['stageSubject'] . "\n";
+                    $details['Sujet du stage'] = $input['stageSubject'];
                 }
                 if (isset($input['stageStartDate']) && isset($input['stageEndDate'])) {
-                    $message .= "Période : " . date('d/m/Y', strtotime($input['stageStartDate'])) . " - " . date('d/m/Y', strtotime($input['stageEndDate'])) . "\n";
+                    $details['Période'] = date('d/m/Y', strtotime($input['stageStartDate'])) . ' - ' . date('d/m/Y', strtotime($input['stageEndDate']));
                 }
             }
             
-            $message .= "----------------------------------------\n\n";
-            $message .= "Votre demande est en cours de traitement. Nous vous tiendrons informé dès que votre document sera prêt.\n\n";
-            $message .= "Vous pouvez utiliser le numéro de référence ci-dessus pour suivre l'état de votre demande.\n\n";
-            $message .= "Cordialement,\nLe Service de la Scolarité";
+            // Construire le message avec le tableau HTML
+            $message = "Bonjour " . $student['prenom'] . " " . $student['nom'] . ",\n\n";
+            $message .= "Nous avons bien reçu votre demande de " . strtolower($docLabel) . ".\n\n";
             
-            // Charger le service d'email et envoyer
+            // Charger le service d'email pour utiliser la fonction de formatage
             $emailServiceFile = __DIR__ . '/EmailService.php';
             if (file_exists($emailServiceFile)) {
                 require_once $emailServiceFile;
-                send_email_to_student($student['email'], $subject, $message, false);
+                // Créer le message avec le tableau HTML
+                $introText = "Bonjour " . $student['prenom'] . " " . $student['nom'] . ",\n\n";
+                $introText .= "Nous avons bien reçu votre demande de " . strtolower($docLabel) . ".\n\n";
+                $detailsTable = format_request_details_table($details);
+                $closingText = "Votre demande est en cours de traitement. Nous vous tiendrons informé dès que votre document sera prêt.\n\n";
+                $closingText .= "Vous pouvez utiliser le numéro de référence ci-dessus pour suivre l'état de votre demande.\n\n";
+                $closingText .= "Cordialement,\nLe Service de la Scolarité";
+                
+                // Combiner le tout en HTML
+                $htmlMessage = convert_text_to_html($introText) . $detailsTable . convert_text_to_html($closingText);
+                
+                // Envoyer l'email avec le message HTML
+                send_email_to_student($student['email'], $subject, $htmlMessage, true);
             } else {
+                // Fallback : message texte simple si EmailService n'est pas disponible
+                $message .= "Détails de votre demande :\n";
+                $message .= "----------------------------------------\n";
+                foreach ($details as $label => $value) {
+                    $message .= $label . " : " . $value . "\n";
+                }
+                $message .= "----------------------------------------\n\n";
+                $message .= "Votre demande est en cours de traitement. Nous vous tiendrons informé dès que votre document sera prêt.\n\n";
+                $message .= "Vous pouvez utiliser le numéro de référence ci-dessus pour suivre l'état de votre demande.\n\n";
+                $message .= "Cordialement,\nLe Service de la Scolarité";
+                
                 // En développement, logger l'email
                 error_log("=== EMAIL CONFIRMATION DEMANDE ===");
                 error_log("A: " . $student['email']);
@@ -735,7 +777,7 @@ SQL;
                 $message .= "Nous vous informons que votre demande de " . strtolower($docLabel) . " (Référence: " . $request['numero_reference'] . ") ";
                 $message .= "a été refusée.\n\n";
                 
-                // Ajouter les raisons du refus si fournies
+                // Ajouter les raisons du refus si fournies - format pour être détecté comme réponse
                 if (!empty($input['rejectionReason']) && trim($input['rejectionReason']) !== '') {
                     $message .= "Raisons du refus :\n";
                     $message .= trim($input['rejectionReason']) . "\n\n";
@@ -784,15 +826,17 @@ function handle_get_student_history(PDO $pdo): void
     try {
         // Query to find years and semesters from registered modules
         // We join inscrit_module with module_filiere (via module ID) to get the semester
-        // We assume year comes from 'session' column in inscrit_module
+        // We get the year from inscription_etudiant via the filiere that contains the module
         $sql = <<<SQL
 SELECT DISTINCT 
-    im.session as annee_universitaire,
+    CONCAT(au.annee_debut, '-', au.annee_fin) as annee_universitaire,
     mf.semestre
 FROM inscrit_module im
 JOIN module_filiere mf ON mf.id_module = im.id_module
+JOIN inscription_etudiant ie ON ie.id_etudiant = im.id_etudiant AND ie.id_filiere = mf.id_filiere
+JOIN annee_universitaire au ON au.id_annee = ie.id_annee
 WHERE im.id_etudiant = :studentId
-ORDER BY im.session DESC, mf.semestre ASC
+ORDER BY au.annee_debut DESC, mf.semestre ASC
 SQL;
 
         $stmt = $pdo->prepare($sql);
@@ -886,7 +930,6 @@ SQL;
 
         if ($request['statut'] === 'traite') {
             $message .= "a été traitée avec succès.\n\n";
-            $message .= "Votre document est disponible en téléchargement depuis votre espace.\n\n";
         } elseif ($request['statut'] === 'refuse' || $request['statut'] === 'rejetee' || $request['statut'] === 'rejeté' || $request['statut'] === 'rejetée') {
             $message .= "a été refusée.\n\n";
             $message .= "Pour plus d'informations, merci de contacter le service de la scolarité.\n\n";
@@ -965,6 +1008,7 @@ function handle_download_document(PDO $pdo, string $id): void
     }
     
     // Récupérer toutes les informations de la demande
+    // Récupérer toutes les informations de la demande (sans filière, on la récupérera après selon le type de document)
     $sql = <<<SQL
 SELECT 
   d.id_demande,
@@ -980,7 +1024,20 @@ SELECT
   e.cin AS etu_cin,
   e.date_naissance AS etu_date_naissance,
   e.lieu_naissance AS etu_lieu_naissance,
-  e.niveau_scolaire AS etu_niveau,
+  (SELECT CASE 
+    WHEN f_latest.nom_filiere = '2AP1' THEN '1er annee'
+    WHEN f_latest.nom_filiere = '2AP2' THEN '2éme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 1' THEN '3eme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 2' THEN '4eme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 3' THEN '5eme annee'
+    ELSE NULL
+  END
+  FROM inscription_etudiant ie_latest
+  JOIN filiere f_latest ON f_latest.id_filiere = ie_latest.id_filiere
+  JOIN annee_universitaire au_latest ON au_latest.id_annee = ie_latest.id_annee
+  WHERE ie_latest.id_etudiant = e.id_etudiant
+  ORDER BY au_latest.annee_debut DESC
+  LIMIT 1) AS etu_niveau,
   ar.annee_universitaire AS ar_annee,
   rn.annee_universitaire AS rn_annee,
   rn.semestre AS rn_semestre,
@@ -993,31 +1050,82 @@ SELECT
   cs.nom_responsable_entreprise,
   cs.telephone_responsable_entreprise,
   p.nom AS prof_nom,
-  p.prenom AS prof_prenom,
-  f.nom_filiere AS filiere_nom,
-  f.id_filiere AS filiere_id,
-  au.annee_debut AS annee_debut,
-  au.annee_fin AS annee_fin,
-  ie.moyenne AS moyenne,
-  ie.mention AS mention,
-  ie.est_admis AS est_admis
+  p.prenom AS prof_prenom
 FROM demandes d
 JOIN etudiants e ON e.id_etudiant = d.id_etudiant
 LEFT JOIN attestations_reussite ar ON ar.id_demande = d.id_demande
 LEFT JOIN releves_notes rn ON rn.id_demande = d.id_demande
 LEFT JOIN conventions_stage cs ON cs.id_demande = d.id_demande
 LEFT JOIN professeur p ON p.id_prof = cs.id_prof_encadrant
-LEFT JOIN inscription_etudiant ie ON ie.id_etudiant = e.id_etudiant
-LEFT JOIN annee_universitaire au ON au.id_annee = ie.id_annee
-LEFT JOIN filiere f ON f.id_filiere = ie.id_filiere
 WHERE d.id_demande = :id
-ORDER BY COALESCE(au.annee_debut, 0) DESC
-LIMIT 1
 SQL;
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute([':id' => $id]);
     $request = $stmt->fetch();
+    
+    // Déterminer l'année universitaire selon le type de document et récupérer la filière correcte
+    if ($request) {
+        $anneeUniv = null;
+        $skipFiliereFetch = false;
+        $documentType = map_document_type($request['type_document']);
+        
+        if ($documentType === 'releve_notes' && !empty($request['rn_annee'])) {
+            $anneeUniv = $request['rn_annee'];
+        } elseif ($documentType === 'attestation_reussite' && !empty($request['ar_annee'])) {
+            $anneeUniv = $request['ar_annee'];
+        } elseif ($documentType === 'attestation_scolarite') {
+            // Pour attestation de scolarité, utiliser la dernière inscription de l'étudiant
+            // On récupérera la filière généralisée depuis la dernière inscription
+            $latestInscription = get_latest_inscription($pdo, $request['id_etudiant']);
+            if ($latestInscription) {
+                $request['filiere_nom'] = $latestInscription['filiere_nom'];
+                $request['filiere_id'] = $latestInscription['filiere_id'];
+                $request['annee_debut'] = $latestInscription['annee_debut'];
+                $request['annee_fin'] = $latestInscription['annee_fin'];
+                $request['moyenne'] = $latestInscription['moyenne'];
+                $request['mention'] = $latestInscription['mention'];
+                $request['est_admis'] = $latestInscription['est_admis'];
+                // Utiliser l'année universitaire de la dernière inscription pour l'affichage
+                $anneeUniv = $latestInscription['annee_debut'] . '-' . $latestInscription['annee_fin'];
+            } else {
+                // Fallback sur l'année de la demande si aucune inscription trouvée
+                $dateDemande = new DateTime($request['date_demande']);
+                $anneeDemande = (int)$dateDemande->format('Y');
+                $anneeUniv = $anneeDemande . '-' . ($anneeDemande + 1);
+            }
+            // Ne pas récupérer la filière à nouveau, elle est déjà récupérée ci-dessus
+            // On garde $anneeUniv pour l'affichage mais on ne fera pas la récupération supplémentaire
+            $skipFiliereFetch = true;
+        } elseif ($documentType === 'convention_stage') {
+            // Pour convention de stage, utiliser la date de début du stage pour déterminer l'année universitaire
+            if (!empty($request['date_debut_stage'])) {
+                $dateDebutStage = new DateTime($request['date_debut_stage']);
+                $anneeDebut = (int)$dateDebutStage->format('Y');
+                $anneeUniv = $anneeDebut . '-' . ($anneeDebut + 1);
+            } else {
+                // Fallback sur la date de demande si date_debut_stage n'est pas disponible
+                $dateDemande = new DateTime($request['date_demande']);
+                $anneeDemande = (int)$dateDemande->format('Y');
+                $anneeUniv = $anneeDemande . '-' . ($anneeDemande + 1);
+            }
+        }
+        
+        // Récupérer la filière depuis inscription_etudiant pour l'année universitaire appropriée
+        // (sauf pour attestation_scolarite qui utilise déjà la dernière inscription)
+        if ($anneeUniv && !empty($request['id_etudiant']) && !$skipFiliereFetch) {
+            $filiereData = get_filiere_for_academic_year($pdo, $request['id_etudiant'], $anneeUniv);
+            if ($filiereData) {
+                $request['filiere_nom'] = $filiereData['filiere_nom'];
+                $request['filiere_id'] = $filiereData['filiere_id'];
+                $request['annee_debut'] = $filiereData['annee_debut'];
+                $request['annee_fin'] = $filiereData['annee_fin'];
+                $request['moyenne'] = $filiereData['moyenne'];
+                $request['mention'] = $filiereData['mention'];
+                $request['est_admis'] = $filiereData['est_admis'];
+            }
+        }
+    }
 
     if (!$request) {
         while (ob_get_level() > 0) {
@@ -1154,12 +1262,262 @@ SQL;
 }
 
 /**
+ * Calcule le niveau scolaire à partir du nom de la filière
+ * @param string $nomFiliere
+ * @return string
+ */
+function calculate_niveau_scolaire(string $nomFiliere): string
+{
+    $mapping = [
+        '2AP1' => '1er annee',
+        '2AP2' => '2éme annee',
+        'Génie Informatique 1' => '3eme annee',
+        'Génie Informatique 2' => '4eme annee',
+        'Génie Informatique 3' => '5eme annee'
+    ];
+    
+    return $mapping[$nomFiliere] ?? 'Non spécifié';
+}
+
+/**
+ * Calcule la mention à partir de la moyenne
+ * @param float $moyenne
+ * @return string
+ */
+function calculate_mention(float $moyenne): string
+{
+    if ($moyenne >= 16.0) {
+        return 'Très Bien';
+    } elseif ($moyenne >= 14.0) {
+        return 'Bien';
+    } elseif ($moyenne >= 12.0) {
+        return 'Assez Bien';
+    } elseif ($moyenne >= 10.0) {
+        return 'Passable';
+    } else {
+        return 'Insuffisant';
+    }
+}
+
+/**
+ * Retourne le seuil de validation selon la filière
+ * @param string $nomFiliere
+ * @return float Seuil de validation (10.0 pour 2AP1/2AP2, 12.0 pour Génie Informatique)
+ */
+function get_seuil_validation(string $nomFiliere): float
+{
+    // 2AP1 et 2AP2 : validation à partir de 10/20
+    if ($nomFiliere === '2AP1' || $nomFiliere === '2AP2') {
+        return 10.0;
+    }
+    // Génie Informatique 1, 2, 3 : validation à partir de 12/20
+    if (strpos($nomFiliere, 'Génie Informatique') === 0) {
+        return 12.0;
+    }
+    // Par défaut, utiliser 10.0
+    return 10.0;
+}
+
+/**
+ * Détermine si un module est validé selon la note et la filière
+ * @param float $note Note du module
+ * @param string $nomFiliere Nom de la filière
+ * @return bool true si le module est validé, false sinon
+ */
+function is_module_valide(float $note, string $nomFiliere): bool
+{
+    $seuil = get_seuil_validation($nomFiliere);
+    return $note >= $seuil;
+}
+
+/**
+ * Récupère la dernière inscription d'un étudiant (la plus récente selon l'année universitaire)
+ * Calcule dynamiquement moyenne, mention et est_admis à partir des notes
+ * @param PDO $pdo
+ * @param string $idEtudiant
+ * @return array|null Retourne ['filiere_nom', 'filiere_id', 'annee_debut', 'annee_fin', 'moyenne', 'mention', 'est_admis'] ou null
+ */
+function get_latest_inscription(PDO $pdo, string $idEtudiant): ?array
+{
+    try {
+        $sql = <<<SQL
+SELECT 
+    f.nom_filiere AS filiere_nom,
+    f.id_filiere AS filiere_id,
+    au.annee_debut,
+    au.annee_fin,
+    au.id_annee,
+    AVG(im.note) as moyenne,
+    CASE 
+        WHEN AVG(im.note) >= 16.0 THEN 'Très Bien'
+        WHEN AVG(im.note) >= 14.0 THEN 'Bien'
+        WHEN AVG(im.note) >= 12.0 THEN 'Assez Bien'
+        WHEN AVG(im.note) >= 10.0 THEN 'Passable'
+        ELSE 'Insuffisant'
+    END as mention,
+    CASE 
+        WHEN f.nom_filiere IN ('2AP1', '2AP2') AND AVG(im.note) >= 10.0 THEN 1
+        WHEN f.nom_filiere LIKE 'Génie Informatique%' AND AVG(im.note) >= 12.0 THEN 1
+        ELSE 0
+    END as est_admis
+FROM inscription_etudiant ie
+JOIN filiere f ON f.id_filiere = ie.id_filiere
+JOIN annee_universitaire au ON au.id_annee = ie.id_annee
+LEFT JOIN inscrit_module im ON im.id_etudiant = ie.id_etudiant
+LEFT JOIN module_filiere mf ON mf.id_module = im.id_module 
+    AND mf.id_filiere = ie.id_filiere
+WHERE ie.id_etudiant = :id_etudiant
+    AND im.note IS NOT NULL
+GROUP BY ie.id_etudiant, ie.id_filiere, ie.id_annee, f.nom_filiere, f.id_filiere, au.annee_debut, au.annee_fin, au.id_annee
+ORDER BY au.annee_debut DESC
+LIMIT 1
+SQL;
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':id_etudiant' => $idEtudiant]);
+        
+        $result = $stmt->fetch();
+        
+        // Si aucune note trouvée, retourner quand même les infos de base sans moyenne
+        if (!$result) {
+            $sqlFallback = <<<SQL
+SELECT 
+    f.nom_filiere AS filiere_nom,
+    f.id_filiere AS filiere_id,
+    au.annee_debut,
+    au.annee_fin,
+    au.id_annee
+FROM inscription_etudiant ie
+JOIN filiere f ON f.id_filiere = ie.id_filiere
+JOIN annee_universitaire au ON au.id_annee = ie.id_annee
+WHERE ie.id_etudiant = :id_etudiant
+ORDER BY au.annee_debut DESC
+LIMIT 1
+SQL;
+            $stmtFallback = $pdo->prepare($sqlFallback);
+            $stmtFallback->execute([':id_etudiant' => $idEtudiant]);
+            $result = $stmtFallback->fetch();
+            if ($result) {
+                $result['moyenne'] = null;
+                $result['mention'] = null;
+                $result['est_admis'] = 0;
+            }
+        }
+        
+        return $result ? $result : null;
+    } catch (\PDOException $e) {
+        error_log("Erreur lors de la récupération de la dernière inscription: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Récupère la filière d'un étudiant pour une année universitaire donnée depuis inscription_etudiant
+ * Calcule dynamiquement moyenne, mention et est_admis à partir des notes
+ * @param PDO $pdo
+ * @param string $idEtudiant
+ * @param string $anneeUniv Format 'YYYY-YYYY' ou 'YYYY/YYYY'
+ * @return array|null Retourne ['filiere_nom', 'filiere_id', 'annee_debut', 'annee_fin', 'moyenne', 'mention', 'est_admis'] ou null
+ */
+function get_filiere_for_academic_year(PDO $pdo, string $idEtudiant, string $anneeUniv): ?array
+{
+    // Convertir le format de l'année universitaire (YYYY-YYYY ou YYYY/YYYY) en année de début
+    $anneeDebut = null;
+    if (preg_match('/^(\d{4})[-\/]\d{4}$/', $anneeUniv, $matches)) {
+        $anneeDebut = (int)$matches[1];
+    } elseif (preg_match('/^\d{4}$/', $anneeUniv)) {
+        $anneeDebut = (int)$anneeUniv;
+    }
+    
+    if ($anneeDebut === null) {
+        return null;
+    }
+    
+    try {
+        $sql = <<<SQL
+SELECT 
+    f.nom_filiere AS filiere_nom,
+    f.id_filiere AS filiere_id,
+    au.annee_debut,
+    au.annee_fin,
+    au.id_annee,
+    AVG(im.note) as moyenne,
+    CASE 
+        WHEN AVG(im.note) >= 16.0 THEN 'Très Bien'
+        WHEN AVG(im.note) >= 14.0 THEN 'Bien'
+        WHEN AVG(im.note) >= 12.0 THEN 'Assez Bien'
+        WHEN AVG(im.note) >= 10.0 THEN 'Passable'
+        ELSE 'Insuffisant'
+    END as mention,
+    CASE 
+        WHEN f.nom_filiere IN ('2AP1', '2AP2') AND AVG(im.note) >= 10.0 THEN 1
+        WHEN f.nom_filiere LIKE 'Génie Informatique%' AND AVG(im.note) >= 12.0 THEN 1
+        ELSE 0
+    END as est_admis
+FROM inscription_etudiant ie
+JOIN filiere f ON f.id_filiere = ie.id_filiere
+JOIN annee_universitaire au ON au.id_annee = ie.id_annee
+LEFT JOIN inscrit_module im ON im.id_etudiant = ie.id_etudiant
+LEFT JOIN module_filiere mf ON mf.id_module = im.id_module 
+    AND mf.id_filiere = ie.id_filiere
+WHERE ie.id_etudiant = :id_etudiant
+    AND au.annee_debut = :annee_debut
+    AND im.note IS NOT NULL
+GROUP BY ie.id_etudiant, ie.id_filiere, ie.id_annee, f.nom_filiere, f.id_filiere, au.annee_debut, au.annee_fin, au.id_annee
+LIMIT 1
+SQL;
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':id_etudiant' => $idEtudiant,
+            ':annee_debut' => $anneeDebut
+        ]);
+        
+        $result = $stmt->fetch();
+        
+        // Si aucune note trouvée, retourner quand même les infos de base sans moyenne
+        if (!$result) {
+            $sqlFallback = <<<SQL
+SELECT 
+    f.nom_filiere AS filiere_nom,
+    f.id_filiere AS filiere_id,
+    au.annee_debut,
+    au.annee_fin,
+    au.id_annee
+FROM inscription_etudiant ie
+JOIN filiere f ON f.id_filiere = ie.id_filiere
+JOIN annee_universitaire au ON au.id_annee = ie.id_annee
+WHERE ie.id_etudiant = :id_etudiant
+    AND au.annee_debut = :annee_debut
+LIMIT 1
+SQL;
+            $stmtFallback = $pdo->prepare($sqlFallback);
+            $stmtFallback->execute([
+                ':id_etudiant' => $idEtudiant,
+                ':annee_debut' => $anneeDebut
+            ]);
+            $result = $stmtFallback->fetch();
+            if ($result) {
+                $result['moyenne'] = null;
+                $result['mention'] = null;
+                $result['est_admis'] = 0;
+            }
+        }
+        
+        return $result ? $result : null;
+    } catch (\PDOException $e) {
+        error_log("Erreur lors de la récupération de la filière: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
  * Génère le PDF en mémoire (pour pièce jointe email)
  * Retourne un tableau avec 'content' (contenu binaire) et 'filename' (nom du fichier)
  */
 function generate_pdf_attachment(PDO $pdo, string $requestId): ?array
 {
-    // Récupérer toutes les informations de la demande
+    // Récupérer toutes les informations de la demande (sans filière, on la récupérera après selon le type de document)
     $sql = <<<SQL
 SELECT 
   d.id_demande,
@@ -1175,7 +1533,20 @@ SELECT
   e.cin AS etu_cin,
   e.date_naissance AS etu_date_naissance,
   e.lieu_naissance AS etu_lieu_naissance,
-  e.niveau_scolaire AS etu_niveau,
+  (SELECT CASE 
+    WHEN f_latest.nom_filiere = '2AP1' THEN '1er annee'
+    WHEN f_latest.nom_filiere = '2AP2' THEN '2éme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 1' THEN '3eme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 2' THEN '4eme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 3' THEN '5eme annee'
+    ELSE NULL
+  END
+  FROM inscription_etudiant ie_latest
+  JOIN filiere f_latest ON f_latest.id_filiere = ie_latest.id_filiere
+  JOIN annee_universitaire au_latest ON au_latest.id_annee = ie_latest.id_annee
+  WHERE ie_latest.id_etudiant = e.id_etudiant
+  ORDER BY au_latest.annee_debut DESC
+  LIMIT 1) AS etu_niveau,
   ar.annee_universitaire AS ar_annee,
   rn.annee_universitaire AS rn_annee,
   rn.semestre AS rn_semestre,
@@ -1188,26 +1559,14 @@ SELECT
   cs.nom_responsable_entreprise,
   cs.telephone_responsable_entreprise,
   p.nom AS prof_nom,
-  p.prenom AS prof_prenom,
-  f.nom_filiere AS filiere_nom,
-  f.id_filiere AS filiere_id,
-  au.annee_debut AS annee_debut,
-  au.annee_fin AS annee_fin,
-  ie.moyenne AS moyenne,
-  ie.mention AS mention,
-  ie.est_admis AS est_admis
+  p.prenom AS prof_prenom
 FROM demandes d
 JOIN etudiants e ON e.id_etudiant = d.id_etudiant
 LEFT JOIN attestations_reussite ar ON ar.id_demande = d.id_demande
 LEFT JOIN releves_notes rn ON rn.id_demande = d.id_demande
 LEFT JOIN conventions_stage cs ON cs.id_demande = d.id_demande
 LEFT JOIN professeur p ON p.id_prof = cs.id_prof_encadrant
-LEFT JOIN inscription_etudiant ie ON ie.id_etudiant = e.id_etudiant
-LEFT JOIN annee_universitaire au ON au.id_annee = ie.id_annee
-LEFT JOIN filiere f ON f.id_filiere = ie.id_filiere
 WHERE d.id_demande = :id
-ORDER BY COALESCE(au.annee_debut, 0) DESC
-LIMIT 1
 SQL;
 
     $stmt = $pdo->prepare($sql);
@@ -1218,8 +1577,67 @@ SQL;
         return null;
     }
 
-    // Générer le HTML du document selon le type
+    // Déterminer l'année universitaire selon le type de document et récupérer la filière correcte
+    $anneeUniv = null;
+    $skipFiliereFetch = false;
     $documentType = map_document_type($request['type_document']);
+    
+    if ($documentType === 'releve_notes' && !empty($request['rn_annee'])) {
+        $anneeUniv = $request['rn_annee'];
+    } elseif ($documentType === 'attestation_reussite' && !empty($request['ar_annee'])) {
+        $anneeUniv = $request['ar_annee'];
+    } elseif ($documentType === 'attestation_scolarite') {
+        // Pour attestation de scolarité, utiliser la dernière inscription de l'étudiant
+        // On récupérera la filière généralisée depuis la dernière inscription
+        $latestInscription = get_latest_inscription($pdo, $request['id_etudiant']);
+        if ($latestInscription) {
+            $request['filiere_nom'] = $latestInscription['filiere_nom'];
+            $request['filiere_id'] = $latestInscription['filiere_id'];
+            $request['annee_debut'] = $latestInscription['annee_debut'];
+            $request['annee_fin'] = $latestInscription['annee_fin'];
+            $request['moyenne'] = $latestInscription['moyenne'];
+            $request['mention'] = $latestInscription['mention'];
+            $request['est_admis'] = $latestInscription['est_admis'];
+            // Utiliser l'année universitaire de la dernière inscription pour l'affichage
+            $anneeUniv = $latestInscription['annee_debut'] . '-' . $latestInscription['annee_fin'];
+        } else {
+            // Fallback sur l'année de la demande si aucune inscription trouvée
+            $dateDemande = new DateTime($request['date_demande']);
+            $anneeDemande = (int)$dateDemande->format('Y');
+            $anneeUniv = $anneeDemande . '-' . ($anneeDemande + 1);
+        }
+        // Ne pas récupérer la filière à nouveau, elle est déjà récupérée ci-dessus
+        $skipFiliereFetch = true;
+    } elseif ($documentType === 'convention_stage') {
+        // Pour convention de stage, utiliser la date de début du stage pour déterminer l'année universitaire
+        if (!empty($request['date_debut_stage'])) {
+            $dateDebutStage = new DateTime($request['date_debut_stage']);
+            $anneeDebut = (int)$dateDebutStage->format('Y');
+            $anneeUniv = $anneeDebut . '-' . ($anneeDebut + 1);
+        } else {
+            // Fallback sur la date de demande si date_debut_stage n'est pas disponible
+            $dateDemande = new DateTime($request['date_demande']);
+            $anneeDemande = (int)$dateDemande->format('Y');
+            $anneeUniv = $anneeDemande . '-' . ($anneeDemande + 1);
+        }
+    }
+    
+    // Récupérer la filière depuis inscription_etudiant pour l'année universitaire appropriée
+    // (sauf pour attestation_scolarite qui utilise déjà la dernière inscription)
+    if ($anneeUniv && !empty($request['id_etudiant']) && !$skipFiliereFetch) {
+        $filiereData = get_filiere_for_academic_year($pdo, $request['id_etudiant'], $anneeUniv);
+        if ($filiereData) {
+            $request['filiere_nom'] = $filiereData['filiere_nom'];
+            $request['filiere_id'] = $filiereData['filiere_id'];
+            $request['annee_debut'] = $filiereData['annee_debut'];
+            $request['annee_fin'] = $filiereData['annee_fin'];
+            $request['moyenne'] = $filiereData['moyenne'];
+            $request['mention'] = $filiereData['mention'];
+            $request['est_admis'] = $filiereData['est_admis'];
+        }
+    }
+
+    // Générer le HTML du document selon le type
     $htmlContent = generate_document_pdf($request, $documentType, $pdo);
 
     // Déterminer le nom du fichier
@@ -1501,29 +1919,31 @@ function generate_attestation_scolarite_html(array $request, string $logoUrl): s
     // Nom complet de l'étudiant (NOM PRENOM en majuscules)
     $nomComplet = strtoupper(htmlspecialchars($request['etu_nom'] . ' ' . $request['etu_prenom']));
     
-    // Filière
+    // Filière - Utiliser directement la filière depuis inscription_etudiant (déjà récupérée comme dernière inscription)
     $filiere = !empty($request['filiere_nom']) ? htmlspecialchars($request['filiere_nom']) : 'Non spécifiée';
     
     // Déterminer le diplôme et la description de la filière
     $diplome = 'Ingénieur d\'État';
     
-    // Niveau formaté
-    $niveau = htmlspecialchars($request['etu_niveau'] ?? '');
-    if (strpos($niveau, '1er') !== false || strpos($niveau, '1') !== false) {
-        $anneeTexte = '1ère Année';
-    } elseif (strpos($niveau, '2') !== false) {
-        $anneeTexte = '2ème Année';
-    } elseif (strpos($niveau, '3') !== false) {
-        $anneeTexte = '3ème Année';
+    // Généraliser la description de la filière selon les règles :
+    // - 2AP1 ou 2AP2 → "Classes préparatoires"
+    // - Génie Informatique 1, 2 ou 3 → "Génie Informatique"
+    $filiereDescription = '';
+    if ($filiere === '2AP1' ) {
+        $filiereDescription = ' 1ère année classe préparatoire (2AP1)';
+    }elseif($filiere === '2AP2') {
+        $filiereDescription = ' 2ème année classe préparatoire (2AP2)';
+    }elseif($filiere === 'Génie Informatique 1') {
+        $filiereDescription = 'Génie Informatique 1';
+    }elseif($filiere === 'Génie Informatique 2') {
+        $filiereDescription = 'Génie Informatique 2';
+    }elseif($filiere === 'Génie Informatique 3') {
+        $filiereDescription = 'Génie Informatique 3';
+    }elseif (!empty($filiere) && $filiere !== 'Non spécifiée') {
+        // Fallback: utiliser directement le nom de la filière
+        $filiereDescription = $filiere;
     } else {
-        $anneeTexte = $niveau;
-    }
-    
-    // Mapper les filières aux descriptions complètes
-    if ($filiere === '2AP1' || $filiere === '2AP2') {
-        $filiereDescription = $anneeTexte . ' Classe preparatoire';
-    } else {
-        $filiereDescription = $anneeTexte . ' ' . $filiere;
+        $filiereDescription = 'Non spécifiée';
     }
     
     // Date et référence
@@ -1646,20 +2066,43 @@ function generate_attestation_reussite_html(array $request, string $logoUrl): st
     $heureGeneration = date('H:i:s');
     $refDoc = htmlspecialchars($request['numero_reference'] ?? '');
     
-    // Année universitaire / Session
-    $anneeUniv = htmlspecialchars($request['ar_annee'] ?? '');
-    if (empty($anneeUniv) && !empty($request['annee_debut'])) {
+    // Année universitaire
+    $anneeUniv = '';
+    if (!empty($request['ar_annee'])) {
+        // Convertir format 2023-2024 en 2023/2024 pour l'affichage
+        $anneeUniv = str_replace('-', '/', $request['ar_annee']);
+    } elseif (!empty($request['annee_debut']) && !empty($request['annee_fin'])) {
         $anneeUniv = $request['annee_debut'] . '/' . $request['annee_fin'];
+    } else {
+        // Utiliser l'année en cours comme fallback
+        $currentYear = (int)date('Y');
+        $anneeUniv = $currentYear . '/' . ($currentYear + 1);
     }
-    
-    // Session (par défaut "Ordinaire" ou "Principale" si non spécifiée, ou basée sur l'année)
-    // Le template montre "Printemps 2020/2021", on va mettre l'année universitaire comme session par défaut
-    $session = $anneeUniv;
 
     // Informations Étudiant
     $nomComplet = strtoupper(htmlspecialchars($request['etu_nom'] . ' ' . $request['etu_prenom']));
     $cne = htmlspecialchars($request['etu_cin']); // Utilisation du CIN comme CNE si pas de champ CNE distinct
-    $filiere = htmlspecialchars($request['filiere_nom'] ?? '');
+    
+    // Formater la description de la filière selon son nom
+    $filiereRaw = !empty($request['filiere_nom']) ? $request['filiere_nom'] : '';
+    $filiere = '';
+    if ($filiereRaw === '2AP1') {
+        $filiere = '1ère année classe préparatoire (2AP1)';
+    } elseif ($filiereRaw === '2AP2') {
+        $filiere = '2ème année classe préparatoire (2AP2)';
+    } elseif ($filiereRaw === 'Génie Informatique 1') {
+        $filiere = 'Génie Informatique 1';
+    } elseif ($filiereRaw === 'Génie Informatique 2') {
+        $filiere = 'Génie Informatique 2';
+    } elseif ($filiereRaw === 'Génie Informatique 3') {
+        $filiere = 'Génie Informatique 3';
+    } elseif (!empty($filiereRaw)) {
+        // Fallback: utiliser directement le nom de la filière
+        $filiere = $filiereRaw;
+    } else {
+        $filiere = 'Non spécifiée';
+    }
+    $filiere = htmlspecialchars($filiere);
     
     // Mention
     $mention = htmlspecialchars($request['mention'] ?? 'Passable');
@@ -1711,8 +2154,8 @@ function generate_attestation_reussite_html(array $request, string $logoUrl): st
                      <td> ' . $filiere . '</td>
                 </tr>
                 <tr>
-                    <td style="font-weight: bold;">Session</td>
-                     <td> ' . $session . '</td>
+                    <td style="font-weight: bold;">Année universitaire</td>
+                     <td> <strong>' . htmlspecialchars($anneeUniv) . '</strong></td>
                 </tr>
                 <tr>
                     <td style="font-weight: bold;">Avec mention</td>
@@ -1782,28 +2225,38 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
         $anneeUniv = $currentYear . '/' . ($currentYear + 1);
     }
     
-    // Niveau/Filière
-    $niveau = htmlspecialchars($request['etu_niveau'] ?? '');
-    $filiere = !empty($request['filiere_nom']) ? htmlspecialchars($request['filiere_nom']) : '';
+    // Semestre demandé
+    $semestre = htmlspecialchars($request['rn_semestre'] ?? 'S1');
     
-    if (strpos($niveau, '1er') !== false || strpos($niveau, '1') !== false) {
-        $niveauTexte = '1ère année';
-    } elseif (strpos($niveau, '2') !== false) {
-        $niveauTexte = '2ème année';
-    } elseif (strpos($niveau, '3') !== false) {
-        $niveauTexte = '3ème année';
-    } else {
-        $niveauTexte = $niveau;
+    // Récupérer le numéro de semestre pour filtrer les modules
+    $semestreNum = null;
+    if (!empty($request['rn_semestre'])) {
+        $semestreStr = trim($request['rn_semestre']);
+        $semestreNum = (int) preg_replace('/^S/i', '', $semestreStr);
     }
     
-    if ($filiere === '2AP1' || $filiere === '2AP2') {
-        $inscritEn = $niveauTexte . ' Préparatoire';
+    // Utiliser la filière depuis inscription_etudiant (déjà récupérée dans la requête principale)
+    $filiereNom = !empty($request['filiere_nom']) ? htmlspecialchars($request['filiere_nom']) : '';
+    $inscritEn = $filiereNom;
+    
+    // Formater le libellé selon le type de filière
+    if ($filiereNom === '2AP1') {
+        $inscritEn = '1ère année classe préparatoire (2AP1)';
+    } elseif ($filiereNom === '2AP2') {
+        $inscritEn = '2ème année classe préparatoire (2AP2)';
+    } elseif (!empty($filiereNom)) {
+        $inscritEn = $filiereNom;
     } else {
-        $inscritEn = $niveauTexte . ($filiere ? ' ' . $filiere : '');
+        $inscritEn = 'Non spécifiée';
     }
     
-    // Session
-    $session = htmlspecialchars($request['rn_semestre'] ?? 'Session 1');
+    // Récupérer l'année universitaire depuis rn_annee si disponible, sinon depuis annee_debut/annee_fin
+    $anneeUnivReleve = '';
+    if (!empty($request['rn_annee'])) {
+        $anneeUnivReleve = $request['rn_annee'];
+    } elseif (!empty($request['annee_debut']) && !empty($request['annee_fin'])) {
+        $anneeUnivReleve = $request['annee_debut'] . '-' . $request['annee_fin'];
+    }
     
     // Récupérer les notes des modules si PDO est fourni
     $modules = [];
@@ -1812,19 +2265,56 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
     
     if ($pdo && !empty($request['id_etudiant'])) {
         try {
+            // Utiliser le $semestreNum déjà calculé plus haut pour filtrer les modules
+            
+            // Construire la requête avec filtrage par semestre et année universitaire
+            // On utilise DISTINCT pour éviter les doublons si un module est dans plusieurs filières
+            // L'année universitaire vient de inscription_etudiant via la filière
             $sqlModules = "
-                SELECT 
+                SELECT DISTINCT
                     m.nom_module,
                     im.note,
-                    im.est_valide,
-                    im.session
+                    im.session,
+                    mf.semestre,
+                    f.nom_filiere,
+                    CONCAT(au.annee_debut, '-', au.annee_fin) as annee_universitaire
                 FROM inscrit_module im
                 JOIN module m ON m.id_module = im.id_module
+                LEFT JOIN module_filiere mf ON mf.id_module = m.id_module
+                LEFT JOIN inscription_etudiant ie ON ie.id_etudiant = im.id_etudiant AND ie.id_filiere = mf.id_filiere
+                LEFT JOIN filiere f ON f.id_filiere = ie.id_filiere
+                LEFT JOIN annee_universitaire au ON au.id_annee = ie.id_annee
                 WHERE im.id_etudiant = :id_etudiant
-                ORDER BY m.id_module
             ";
+            
+            $params = [':id_etudiant' => $request['id_etudiant']];
+            
+            // Filtrer par semestre si spécifié
+            if ($semestreNum !== null && $semestreNum > 0) {
+                $sqlModules .= " AND mf.semestre = :semestre";
+                $params[':semestre'] = $semestreNum;
+            }
+            
+            // Filtrer par année universitaire si spécifiée
+            // Comparer avec le format YYYY-YYYY depuis annee_universitaire
+            if (!empty($request['rn_annee'])) {
+                $anneeUniv = $request['rn_annee'];
+                // Si le format est YYYY-YYYY, l'utiliser tel quel
+                // Sinon, essayer de le convertir
+                if (!preg_match('/^\d{4}-\d{4}$/', $anneeUniv)) {
+                    // Si c'est juste YYYY, créer YYYY-YYYY+1
+                    if (preg_match('/^\d{4}$/', $anneeUniv)) {
+                        $anneeUniv = $anneeUniv . '-' . ((int)$anneeUniv + 1);
+                    }
+                }
+                $sqlModules .= " AND CONCAT(au.annee_debut, '-', au.annee_fin) = :annee_univ";
+                $params[':annee_univ'] = $anneeUniv;
+            }
+            
+            $sqlModules .= " ORDER BY m.id_module";
+            
             $stmtModules = $pdo->prepare($sqlModules);
-            $stmtModules->execute([':id_etudiant' => $request['id_etudiant']]);
+            $stmtModules->execute($params);
             $modules = $stmtModules->fetchAll();
             
             // Calculer la moyenne
@@ -1845,11 +2335,39 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
         $moyenne = number_format($moyenneCalculee, 3);
     } else {
         $moyenne = !empty($request['moyenne']) ? number_format((float)$request['moyenne'], 3) : '0.000';
+        $moyenneCalculee = (float)$moyenne;
     }
     
-    $mention = htmlspecialchars($request['mention'] ?? 'Passable');
-    $estAdmis = !empty($request['est_admis']) && $request['est_admis'] == 1;
+    // Calculer le statut d'admission en fonction de la moyenne du semestre et de la filière
+    // Récupérer la filière pour déterminer le seuil de validation
+    $nomFiliere = null;
+    if (!empty($modules) && isset($modules[0]['nom_filiere'])) {
+        $nomFiliere = $modules[0]['nom_filiere'];
+    } elseif (!empty($request['filiere_nom'])) {
+        $nomFiliere = $request['filiere_nom'];
+    }
+    
+    // Déterminer le seuil selon la filière
+    $seuilValidation = get_seuil_validation($nomFiliere ?? '');
+    
+    // Un étudiant est admis si sa moyenne atteint le seuil de validation de sa filière
+    // 2AP1/2AP2: >= 10/20, Génie Informatique: >= 12/20
+    $estAdmis = $moyenneCalculee >= $seuilValidation;
     $resultatAdmission = $estAdmis ? 'Admis' : 'Non admis';
+    
+    // Calculer la mention en fonction de la moyenne
+    if ($moyenneCalculee >= 16.0) {
+        $mention = 'Très Bien';
+    } elseif ($moyenneCalculee >= 14.0) {
+        $mention = 'Bien';
+    } elseif ($moyenneCalculee >= 12.0) {
+        $mention = 'Assez Bien';
+    } elseif ($moyenneCalculee >= 10.0) {
+        $mention = 'Passable';
+    } else {
+        $mention = 'Insuffisant';
+    }
+    $mention = htmlspecialchars($mention);
     
     // Date de génération
     $mois = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin', 
@@ -1859,55 +2377,63 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
     // Construction du HTML
     $html = '
     <!-- Header -->
-    <div class="header" style="text-align: center; margin-bottom: 20px;">
-        <img src="' . htmlspecialchars($logoUrl) . '" alt="Logo" style="max-height: 70px; margin-bottom: 10px;" />
-        <div style="font-weight: bold; font-size: 11pt; margin-bottom: 3px;">Université Abdelmalek Essaâdi</div>
-        <div style="font-weight: bold; font-size: 10pt;">ENSA Tétouan - École Nationale des Sciences Appliquées</div>
+    <div class="header" style="text-align: center; margin-bottom: 12px;">
+        <img src="' . htmlspecialchars($logoUrl) . '" alt="Logo" style="max-height: 55px; margin-bottom: 5px;" />
+        <div style="font-weight: bold; font-size: 10pt; margin-bottom: 2px;">Université Abdelmalek Essaâdi</div>
+        <div style="font-weight: bold; font-size: 9pt;">ENSA Tétouan - École Nationale des Sciences Appliquées</div>
     </div>
 
     <!-- Titre -->
-    <div style="text-align: center; margin-bottom: 25px;">
-        <h1 style="font-size: 18pt; text-decoration: underline; font-family: serif; letter-spacing: 1px; margin: 0;">
+    <div style="text-align: center; margin-bottom: 12px;">
+        <h1 style="font-size: 16pt; text-decoration: underline; font-family: serif; letter-spacing: 0.5px; margin: 0;">
         RELEVÉ DE NOTES ET RÉSULTATS
         </h1>
     </div>
     
-    <!-- Session -->
-    <div style="text-align: center; border: 1px solid #000; padding: 5px; margin: 10px 0; font-size: 11pt; font-weight: bold;">
-        ' . $session . '
+    <!-- Semestre -->
+    <div style="text-align: center; border: 1px solid #000; padding: 4px; margin: 6px 0; font-size: 10pt; font-weight: bold;">
+        Semestre : <strong>' . $semestre . '</strong>
     </div>
     
     <!-- Informations étudiant -->
-    <div style="margin: 15px 0; font-size: 10pt; line-height: 1.6;">
-        <div style="margin-bottom: 5px;"><strong>' . $nomComplet . '</strong></div>
-        <div style="margin-bottom: 5px;">
+    <div style="margin: 10px 0; font-size: 9pt; line-height: 1.4;">
+        <div style="margin-bottom: 3px;"><strong>' . $nomComplet . '</strong></div>
+        <div style="margin-bottom: 3px;">
             N° Étudiant : <strong>' . $numeroEtudiant . '</strong>
-            &nbsp;&nbsp;&nbsp;&nbsp;
+            &nbsp;&nbsp;&nbsp;
             CIN : <strong>' . $cne . '</strong>
         </div>';
     
     if ($dateNaissance && $lieuNaissance) {
         $html .= '
-        <div style="margin-bottom: 5px;">
+        <div style="margin-bottom: 3px;">
             Né(e) le : <strong>' . $dateNaissance . '</strong> à <strong>' . $lieuNaissance . '</strong>
         </div>';
     }
     
     $html .= '
-        <div style="margin-bottom: 5px;">
-            inscrit(e) en <strong>' . $inscritEn . '</strong>
+        <div style="margin-bottom: 3px;">
+            inscrit(e) en <strong>' . htmlspecialchars($inscritEn) . '</strong>';
+    
+    // Afficher l'année universitaire si disponible
+    if ($anneeUnivReleve) {
+        $anneeUnivDisplay = str_replace('-', '/', $anneeUnivReleve);
+        $html .= ' - Année universitaire <strong>' . htmlspecialchars($anneeUnivDisplay) . '</strong>';
+    }
+    
+    $html .= '
         </div>
-        <div style="margin-top: 10px;">a obtenu les notes suivantes :</div>
+        <div style="margin-top: 6px;">a obtenu les notes suivantes :</div>
     </div>
     
     <!-- Tableau des notes avec résultat final -->
-    <table border="1" style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 10pt;">
+    <table border="1" style="width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9pt;">
         <thead>
             <tr style="background-color: #f0f0f0;">
-                <th style="padding: 8px; text-align: left; width: 40%;"></th>
-                <th style="padding: 8px; text-align: center; width: 20%;">Note/Barème</th>
-                <th style="padding: 8px; text-align: center; width: 20%;">Résultat</th>
-                <th style="padding: 8px; text-align: center; width: 20%;">Session</th>
+                <th style="padding: 5px; text-align: left; width: 40%;">Module</th>
+                <th style="padding: 5px; text-align: center; width: 20%;">Note/Barème</th>
+                <th style="padding: 5px; text-align: center; width: 20%;">Résultat</th>
+                <th style="padding: 5px; text-align: center; width: 20%;">Session</th>
             </tr>
         </thead>
         <tbody>';
@@ -1917,21 +2443,29 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
         foreach ($modules as $module) {
             $nomModule = htmlspecialchars($module['nom_module']);
             $noteModule = $module['note'] !== null ? number_format((float)$module['note'], 2) . '/20' : '-';
-            $resultat = $module['est_valide'] == 1 ? 'Validé' : 'Val après Rat';
-            $sessionModule = htmlspecialchars($module['session'] ?? $session);
+            
+            // Calculer dynamiquement si le module est validé selon la note et la filière
+            $estValide = false;
+            if ($module['note'] !== null && !empty($module['nom_filiere'])) {
+                $estValide = is_module_valide((float)$module['note'], $module['nom_filiere']);
+            }
+            $resultat = $estValide ? 'Validé' : 'Non Validé';
+            
+            // La session indique directement si c'est Normal ou Rattrapage (depuis la colonne session)
+            $sessionModule = htmlspecialchars($module['session'] ?? ($estValide ? 'Normal' : 'Rattrapage'));
             
             $html .= '
             <tr>
-                <td style="padding: 6px;">' . $nomModule . '</td>
-                <td style="padding: 6px; text-align: center;">' . $noteModule . '</td>
-                <td style="padding: 6px; text-align: center;">' . $resultat . '</td>
-                <td style="padding: 6px; text-align: center;">' . $sessionModule . '</td>
+                <td style="padding: 4px;">' . $nomModule . '</td>
+                <td style="padding: 4px; text-align: center;">' . $noteModule . '</td>
+                <td style="padding: 4px; text-align: center;">' . $resultat . '</td>
+                <td style="padding: 4px; text-align: center;">' . $sessionModule . '</td>
             </tr>';
         }
     } else {
         $html .= '
             <tr>
-                <td colspan="4" style="padding: 20px; text-align: center; font-style: italic;">
+                <td colspan="4" style="padding: 15px; text-align: center; font-style: italic;">
                     Aucune note disponible pour cet étudiant.
                 </td>
             </tr>';
@@ -1940,16 +2474,16 @@ function generate_releve_notes_html(array $request, ?PDO $pdo = null, string $lo
     // Ligne du résultat final dans le même tableau
     $html .= '
             <tr style="background-color: #f0f0f0; font-weight: bold;">
-                <td style="padding: 8px;">Résultat d\'admission ' . strtolower($session) . ' :</td>
-                <td style="padding: 8px; text-align: center;"><strong>' . $moyenne . '/20</strong></td>
-                <td style="padding: 8px; text-align: center;"><strong>' . $resultatAdmission . '</strong></td>
-                <td style="padding: 8px; text-align: center;"><strong>' . $mention . '</strong></td>
+                <td style="padding: 5px;">Résultat d\'admission ' . strtolower($semestre) . ' :</td>
+                <td style="padding: 5px; text-align: center;"><strong>' . $moyenne . '/20</strong></td>
+                <td style="padding: 5px; text-align: center;"><strong>' . $resultatAdmission . '</strong></td>
+                <td style="padding: 5px; text-align: center;"><strong>' . $mention . '</strong></td>
             </tr>
         </tbody>
     </table>
     
     <!-- Footer avec informations de l\'école et signature électronique -->
-    <div style="margin-top: 60px; padding-top: 15px; border-top: 1px solid #ccc; font-size: 9pt;">
+    <div style="margin-top: 25px; padding-top: 8px; border-top: 1px solid #ccc; font-size: 8pt;">
         <table style="width: 100%; border-collapse: collapse;">
             <tr>
                 <td style="width: 60%; vertical-align: top; line-height: 1.5;">
@@ -2267,15 +2801,43 @@ SQL;
             $status = 'resolved';
         }
         
+        // Format dates properly - ensure ISO 8601 format with time
+        $createdAt = $row['date_reclamation'];
+        // Si date_reclamation est une chaîne et ne contient pas d'heure (format DATE: 'YYYY-MM-DD')
+        // alors ajouter minuit. Sinon, garder l'heure telle quelle (format DATETIME: 'YYYY-MM-DD HH:MM:SS')
+        if ($createdAt) {
+            $dateStr = is_string($createdAt) ? $createdAt : (string)$createdAt;
+            // Vérifier si c'est un format DATE seulement (10 caractères: YYYY-MM-DD)
+            // ou s'il contient déjà l'heure (19 caractères: YYYY-MM-DD HH:MM:SS ou plus)
+            if (strlen(trim($dateStr)) === 10 && !str_contains($dateStr, ' ') && !str_contains($dateStr, 'T')) {
+                // Format DATE uniquement, ajouter l'heure minuit pour les anciennes données
+                $createdAt = $dateStr . ' 00:00:00';
+            }
+            // Sinon, garder tel quel (déjà au format DATETIME avec l'heure)
+        }
+        $respondedAt = $row['date_reponse'] ?? null;
+        // Si date_reponse est une chaîne et ne contient pas d'heure (format DATE: 'YYYY-MM-DD')
+        // alors ajouter minuit. Sinon, garder l'heure telle quelle (format DATETIME: 'YYYY-MM-DD HH:MM:SS')
+        if ($respondedAt) {
+            // Vérifier si c'est un format DATE seulement (10 caractères: YYYY-MM-DD)
+            // ou s'il contient déjà l'heure (19 caractères: YYYY-MM-DD HH:MM:SS ou plus)
+            $dateStr = is_string($respondedAt) ? $respondedAt : (string)$respondedAt;
+            if (strlen(trim($dateStr)) === 10 && !str_contains($dateStr, ' ') && !str_contains($dateStr, 'T')) {
+                // Format DATE uniquement, ajouter l'heure minuit
+                $respondedAt = $dateStr . ' 00:00:00';
+            }
+            // Sinon, garder tel quel (déjà au format DATETIME avec l'heure)
+        }
+        
         return [
             'id' => $row['id_reclamation'],
             'referenceNumber' => $row['numero_reference'],
             'subject' => $row['objet'],
             'description' => $row['description'],
             'status' => $status,
-            'createdAt' => $row['date_reclamation'],
+            'createdAt' => $createdAt,
             'response' => $row['reponse'] ?? null,
-            'respondedAt' => $row['date_reponse'] ?? null,
+            'respondedAt' => $respondedAt,
             'studentEmail' => $row['etu_email'],
             'apogee' => $row['etu_apogee'],
             'cin' => $row['etu_cin'],
@@ -2346,13 +2908,32 @@ function handle_create_complaint(PDO $pdo): void
     $count = $stmt->fetch()['count'] ?? 0;
     $referenceNumber = 'REC-' . $year . '-' . str_pad((string)($count + 1), 3, '0', STR_PAD_LEFT);
 
+    // Vérifier et modifier le type de colonne si nécessaire (DATE -> DATETIME)
+    // Cela doit être fait une seule fois, mais on vérifie à chaque fois pour la compatibilité
+    try {
+        $checkColumn = $pdo->query("SHOW COLUMNS FROM reclamations LIKE 'date_reclamation'");
+        $columnInfo = $checkColumn->fetch(PDO::FETCH_ASSOC);
+        if ($columnInfo) {
+            $columnType = strtoupper(trim($columnInfo['Type']));
+            // Vérifier si c'est de type DATE (pas DATETIME ni TIMESTAMP)
+            if (strpos($columnType, 'DATE') === 0 && strpos($columnType, 'DATETIME') === false && strpos($columnType, 'TIMESTAMP') === false) {
+                // Modifier la colonne pour accepter DATETIME avec l'heure
+                $pdo->exec("ALTER TABLE reclamations MODIFY COLUMN date_reclamation DATETIME NOT NULL");
+                error_log('Colonne date_reclamation modifiée de DATE à DATETIME avec succès');
+            }
+        }
+    } catch (\PDOException $e) {
+        // Ignorer l'erreur si la colonne n'existe pas ou autre problème
+        error_log('Note: Impossible de vérifier/modifier le type de colonne date_reclamation: ' . $e->getMessage());
+    }
+
     // Insérer la réclamation
     try {
         $stmt = $pdo->prepare('
             INSERT INTO reclamations (
                 id_reclamation, numero_reference, date_reclamation, description, objet, id_etudiant, id_demande
             ) VALUES (
-                :id, :ref, CURDATE(), :description, :objet, :studentId, :demande
+                :id, :ref, NOW(), :description, :objet, :studentId, :demande
             )
         ');
         $stmt->execute([
@@ -2383,7 +2964,7 @@ function handle_create_complaint(PDO $pdo): void
                 INSERT INTO reclamations (
                     id_reclamation, numero_reference, date_reclamation, description, objet, id_etudiant, id_demande
                 ) VALUES (
-                    :id, :ref, CURDATE(), :description, :objet, :studentId, :demande
+                    :id, :ref, NOW(), :description, :objet, :studentId, :demande
                 )
             ');
             $stmt->execute([
@@ -2442,10 +3023,30 @@ SQL;
         send_error('Complaint not found', 404);
     }
 
+    // Vérifier et modifier le type de colonne si nécessaire (DATE -> DATETIME)
+    // Cela doit être fait une seule fois, mais on vérifie à chaque fois pour la compatibilité
+    try {
+        $checkColumn = $pdo->query("SHOW COLUMNS FROM reclamations LIKE 'date_reponse'");
+        $columnInfo = $checkColumn->fetch(PDO::FETCH_ASSOC);
+        if ($columnInfo) {
+            $columnType = strtoupper(trim($columnInfo['Type']));
+            // Vérifier si c'est de type DATE (pas DATETIME ni TIMESTAMP)
+            if (strpos($columnType, 'DATE') === 0 && strpos($columnType, 'DATETIME') === false && strpos($columnType, 'TIMESTAMP') === false) {
+                // Modifier la colonne pour accepter DATETIME avec l'heure
+                $pdo->exec("ALTER TABLE reclamations MODIFY COLUMN date_reponse DATETIME DEFAULT NULL");
+                error_log('Colonne date_reponse modifiée de DATE à DATETIME avec succès');
+            }
+        }
+    } catch (\PDOException $e) {
+        // Ignorer l'erreur si la colonne n'existe pas ou autre problème
+        error_log('Note: Impossible de vérifier/modifier le type de colonne date_reponse: ' . $e->getMessage());
+    }
+
     // Mettre à jour la réponse dans la base de données
+    // Utiliser NOW() pour inclure la date et l'heure complètes
     $stmt = $pdo->prepare('
         UPDATE reclamations 
-        SET reponse = :response, date_reponse = CURDATE(), id_administrateur = :admin
+        SET reponse = :response, date_reponse = NOW(), id_administrateur = :admin
         WHERE id_reclamation = :id
     ');
     $stmt->execute([
@@ -2612,7 +3213,7 @@ function handle_get_semesters(PDO $pdo): void
     
     // Si aucun semestre n'est trouvé, retourner des valeurs par défaut
     if (empty($formatted)) {
-        $formatted = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
+        $formatted = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
     }
     
     send_json($formatted);
@@ -2669,8 +3270,8 @@ function handle_get_student_demands(PDO $pdo): void
         send_error('Student not found with provided credentials', 404);
     }
 
-    // Récupérer les demandes de l'étudiant (en attente ou traitées, pas refusées)
-    // On inclut toutes les demandes sauf celles refusées pour permettre les réclamations
+    // Récupérer toutes les demandes de l'étudiant (y compris refusées pour permettre les réclamations)
+    // Les étudiants peuvent réclamer sur n'importe quelle demande, même refusée
     $sql = <<<SQL
 SELECT 
   d.id_demande,
@@ -2690,7 +3291,6 @@ LEFT JOIN attestations_reussite ar ON ar.id_demande = d.id_demande
 LEFT JOIN releves_notes rn ON rn.id_demande = d.id_demande
 LEFT JOIN conventions_stage cs ON cs.id_demande = d.id_demande
 WHERE d.id_etudiant = :studentId
-  AND d.statut != 'refuse'
 ORDER BY d.date_demande DESC
 SQL;
 
@@ -2786,7 +3386,20 @@ SELECT
   e.prenom AS etu_prenom,
   e.date_naissance AS etu_date_naissance,
   e.lieu_naissance AS etu_lieu_naissance,
-  e.niveau_scolaire AS etu_niveau,
+  (SELECT CASE 
+    WHEN f_latest.nom_filiere = '2AP1' THEN '1er annee'
+    WHEN f_latest.nom_filiere = '2AP2' THEN '2éme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 1' THEN '3eme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 2' THEN '4eme annee'
+    WHEN f_latest.nom_filiere = 'Génie Informatique 3' THEN '5eme annee'
+    ELSE NULL
+  END
+  FROM inscription_etudiant ie_latest
+  JOIN filiere f_latest ON f_latest.id_filiere = ie_latest.id_filiere
+  JOIN annee_universitaire au_latest ON au_latest.id_annee = ie_latest.id_annee
+  WHERE ie_latest.id_etudiant = e.id_etudiant
+  ORDER BY au_latest.annee_debut DESC
+  LIMIT 1) AS etu_niveau,
   d.numero_reference AS demande_ref,
   d.type_document AS demande_type,
   d.statut AS demande_statut,
@@ -2891,15 +3504,43 @@ SQL;
             }
         }
 
+        // Format dates properly - ensure ISO 8601 format with time
+        $createdAt = $row['date_reclamation'];
+        // Si date_reclamation est une chaîne et ne contient pas d'heure (format DATE: 'YYYY-MM-DD')
+        // alors ajouter minuit. Sinon, garder l'heure telle quelle (format DATETIME: 'YYYY-MM-DD HH:MM:SS')
+        if ($createdAt) {
+            $dateStr = is_string($createdAt) ? $createdAt : (string)$createdAt;
+            // Vérifier si c'est un format DATE seulement (10 caractères: YYYY-MM-DD)
+            // ou s'il contient déjà l'heure (19 caractères: YYYY-MM-DD HH:MM:SS ou plus)
+            if (strlen(trim($dateStr)) === 10 && !str_contains($dateStr, ' ') && !str_contains($dateStr, 'T')) {
+                // Format DATE uniquement, ajouter l'heure minuit pour les anciennes données
+                $createdAt = $dateStr . ' 00:00:00';
+            }
+            // Sinon, garder tel quel (déjà au format DATETIME avec l'heure)
+        }
+        $respondedAt = $row['date_reponse'] ?? null;
+        // Si date_reponse est une chaîne et ne contient pas d'heure (format DATE: 'YYYY-MM-DD')
+        // alors ajouter minuit. Sinon, garder l'heure telle quelle (format DATETIME: 'YYYY-MM-DD HH:MM:SS')
+        if ($respondedAt) {
+            // Vérifier si c'est un format DATE seulement (10 caractères: YYYY-MM-DD)
+            // ou s'il contient déjà l'heure (19 caractères: YYYY-MM-DD HH:MM:SS ou plus)
+            $dateStr = is_string($respondedAt) ? $respondedAt : (string)$respondedAt;
+            if (strlen(trim($dateStr)) === 10 && !str_contains($dateStr, ' ') && !str_contains($dateStr, 'T')) {
+                // Format DATE uniquement, ajouter l'heure minuit
+                $respondedAt = $dateStr . ' 00:00:00';
+            }
+            // Sinon, garder tel quel (déjà au format DATETIME avec l'heure)
+        }
+        
         $payload = [
             'id' => $row['id_reclamation'],
             'referenceNumber' => $row['numero_reference'],
             'subject' => $row['objet'],
             'description' => $row['description'],
             'status' => $status,
-            'createdAt' => $row['date_reclamation'],
+            'createdAt' => $createdAt,
             'response' => $row['reponse'] ?? null,
-            'respondedAt' => $row['date_reponse'] ?? null,
+            'respondedAt' => $respondedAt,
             'student' => [
                 'id' => $row['id_etudiant'],
                 'email' => $row['etu_email'],

@@ -25,7 +25,7 @@ export function AdminSidebar() {
 
   const handleLogout = () => {
     logoutAdmin();
-    navigate("/admin/login");
+    navigate("/");
   };
 
   return (

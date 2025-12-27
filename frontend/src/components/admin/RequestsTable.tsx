@@ -429,36 +429,97 @@ export function RequestsTable({
                 </div>
               </div>
 
+              {/* Informations spécifiques selon le type de document */}
+              {selectedRequest.documentType === "releve_notes" && (
+                <div className="rounded-lg border border-border p-4 space-y-3">
+                  <h4 className="font-medium">Informations du relevé de notes</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {selectedRequest.academicYear && (
+                      <div>
+                        <p className="text-muted-foreground">Année universitaire</p>
+                        <p className="font-medium">{selectedRequest.academicYear}</p>
+                      </div>
+                    )}
+                    {selectedRequest.semester && (
+                      <div>
+                        <p className="text-muted-foreground">Semestre</p>
+                        <p className="font-medium">{selectedRequest.semester}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedRequest.documentType === "attestation_reussite" && (
+                <div className="rounded-lg border border-border p-4 space-y-3">
+                  <h4 className="font-medium">Informations de l'attestation de réussite</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {selectedRequest.academicYear && (
+                      <div>
+                        <p className="text-muted-foreground">Année universitaire</p>
+                        <p className="font-medium">{selectedRequest.academicYear}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {selectedRequest.documentType === "convention_stage" && (
                 <div className="rounded-lg border border-border p-4 space-y-3">
                   <h4 className="font-medium">Informations du stage</h4>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Entreprise</p>
-                      <p>{selectedRequest.companyName}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Adresse</p>
-                      <p>{selectedRequest.companyAddress}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Responsable</p>
-                      <p>{selectedRequest.supervisorName}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Email responsable</p>
-                      <p>{selectedRequest.supervisorEmail}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Période</p>
-                      <p>
-                        {selectedRequest.stageStartDate && format(new Date(selectedRequest.stageStartDate), "dd/MM/yyyy")} - {selectedRequest.stageEndDate && format(new Date(selectedRequest.stageEndDate), "dd/MM/yyyy")}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Sujet</p>
-                      <p>{selectedRequest.stageSubject}</p>
-                    </div>
+                    {selectedRequest.companyName && (
+                      <div>
+                        <p className="text-muted-foreground">Entreprise</p>
+                        <p className="font-medium">{selectedRequest.companyName}</p>
+                      </div>
+                    )}
+                    {selectedRequest.companyAddress && (
+                      <div>
+                        <p className="text-muted-foreground">Adresse de l'entreprise</p>
+                        <p className="font-medium">{selectedRequest.companyAddress}</p>
+                      </div>
+                    )}
+                    {selectedRequest.supervisorName && (
+                      <div>
+                        <p className="text-muted-foreground">Responsable entreprise</p>
+                        <p className="font-medium">{selectedRequest.supervisorName}</p>
+                      </div>
+                    )}
+                    {selectedRequest.supervisorEmail && (
+                      <div>
+                        <p className="text-muted-foreground">Email responsable</p>
+                        <p className="font-medium">{selectedRequest.supervisorEmail}</p>
+                      </div>
+                    )}
+                    {selectedRequest.supervisorPhone && (
+                      <div>
+                        <p className="text-muted-foreground">Téléphone responsable</p>
+                        <p className="font-medium">{selectedRequest.supervisorPhone}</p>
+                      </div>
+                    )}
+                    {selectedRequest.academicSupervisor && (
+                      <div>
+                        <p className="text-muted-foreground">Encadrant académique</p>
+                        <p className="font-medium">{selectedRequest.academicSupervisor}</p>
+                      </div>
+                    )}
+                    {(selectedRequest.stageStartDate || selectedRequest.stageEndDate) && (
+                      <div>
+                        <p className="text-muted-foreground">Période du stage</p>
+                        <p className="font-medium">
+                          {selectedRequest.stageStartDate && format(new Date(selectedRequest.stageStartDate), "dd/MM/yyyy")} 
+                          {selectedRequest.stageStartDate && selectedRequest.stageEndDate && " - "}
+                          {selectedRequest.stageEndDate && format(new Date(selectedRequest.stageEndDate), "dd/MM/yyyy")}
+                        </p>
+                      </div>
+                    )}
+                    {selectedRequest.stageSubject && (
+                      <div className="col-span-2">
+                        <p className="text-muted-foreground">Sujet du stage</p>
+                        <p className="font-medium">{selectedRequest.stageSubject}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

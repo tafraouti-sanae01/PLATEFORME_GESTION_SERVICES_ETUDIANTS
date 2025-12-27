@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -33,7 +33,17 @@ export function ComplaintForm() {
   } | null>(null);
   const [studentDemands, setStudentDemands] = useState<StudentDemand[]>([]);
   const [verifiedStudent, setVerifiedStudent] = useState<{ email: string; apogee: string; cin: string } | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { addComplaint, validateStudent } = useApp();
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const {
     register,
@@ -150,15 +160,66 @@ export function ComplaintForm() {
         message: "Votre réclamation a été enregistrée avec succès. Nous vous répondrons dans les plus brefs délais.",
       });
       
-      toast.success("Réclamation envoyée avec succès!");
+      toast.success("Réclamation envoyée avec succès!", { duration: 5000 });
       
-      // Attendre un peu pour que l'utilisateur voie le message de succès
-      setTimeout(() => {
-        reset();
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      // Réinitialiser immédiatement le formulaire pour permettre une nouvelle réclamation
+      // Le formulaire reste utilisable immédiatement
+      reset();
+      setVerifiedStudent(null);
+      setStudentDemands([]);
+      
+      // Attendre 6 secondes pour masquer la notification, vider le cache et faire un nettoyage complet
+      timeoutRef.current = setTimeout(() => {
+        // Masquer la notification
         setSubmitResult(null);
+        
+        // Vider le cache du navigateur
+        if ('caches' in window) {
+          caches.keys().then((names) => {
+            names.forEach((name) => {
+              caches.delete(name);
+            });
+          });
+        }
+        
+        // Réinitialiser complètement le formulaire et tous les états
+        reset({
+          email: "",
+          apogee: "",
+          cin: "",
+          relatedRequestNumber: "",
+          subject: "",
+          description: "",
+        }, {
+          keepErrors: false,
+          keepDirty: false,
+          keepIsSubmitted: false,
+          keepTouched: false,
+          keepIsValid: false,
+          keepSubmitCount: false,
+        });
+        
+        // S'assurer que tous les états sont réinitialisés
         setVerifiedStudent(null);
         setStudentDemands([]);
-      }, 2000);
+        setIsSubmitting(false);
+        setIsLoadingDemands(false);
+        
+        // Réinitialiser tous les champs du formulaire
+        setValue("relatedRequestNumber", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("email", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("apogee", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("cin", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("subject", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("description", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        
+        timeoutRef.current = null;
+      }, 5000); // 5 secondes
     } catch (error) {
       setSubmitResult({
         success: false,

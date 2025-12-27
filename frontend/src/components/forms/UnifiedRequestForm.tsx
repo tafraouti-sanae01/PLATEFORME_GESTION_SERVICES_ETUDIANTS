@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -73,8 +73,18 @@ export function UnifiedRequestForm() {
   const [academicSupervisors, setAcademicSupervisors] = useState<string[]>(defaultAcademicSupervisors);
   const [studentHistory, setStudentHistory] = useState<StudentHistory[]>([]);
   const [availableSemesters, setAvailableSemesters] = useState<string[]>([]);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { validateStudent, addRequest, addComplaint } = useApp();
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const {
     register,
@@ -219,7 +229,7 @@ export function UnifiedRequestForm() {
 
         setSubmitResult({
           success: true,
-          message: "Votre réclamation a été enregistrée avec succès. Un email de confirmation avec tous les détails vous sera envoyé.",
+          message: "Votre réclamation a été enregistrée avec succès. Nous vous répondrons dans les plus brefs délais.",
         });
       } else {
         const result = await addRequest({
@@ -246,18 +256,79 @@ export function UnifiedRequestForm() {
         });
       }
 
-      toast.success("Demande envoyée avec succès!");
+      toast.success("Demande envoyée avec succès!", { duration: 5000 });
       
-      // Attendre un peu pour que l'utilisateur voie le message de succès
-      setTimeout(() => {
-        // Réinitialiser le formulaire et tous les états
-        reset();
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      // Réinitialiser immédiatement le formulaire pour permettre une nouvelle demande
+      // Le formulaire reste utilisable immédiatement
+      reset();
+      setVerifiedStudent(null);
+      setValidationError(null);
+      setStudentHistory([]);
+      setAvailableSemesters([]);
+      
+      // Attendre 5 secondes pour masquer la notification, vider le cache et faire un nettoyage complet
+      timeoutRef.current = setTimeout(() => {
+        // Masquer la notification
+        setSubmitResult(null);
+        
+        // Vider le cache du navigateur
+        if ('caches' in window) {
+          caches.keys().then((names) => {
+            names.forEach((name) => {
+              caches.delete(name);
+            });
+          });
+        }
+        
+        // Réinitialiser complètement tous les champs du formulaire pour un état propre
+        reset({
+          email: "",
+          apogee: "",
+          cin: "",
+          documentType: undefined,
+          academicYear: undefined,
+          semester: undefined,
+          companyName: undefined,
+          companyAddress: undefined,
+          supervisorName: undefined,
+          supervisorEmail: undefined,
+          supervisorPhone: undefined,
+          stageStartDate: undefined,
+          stageEndDate: undefined,
+          stageSubject: undefined,
+          academicSupervisor: undefined,
+          reclamationSubject: undefined,
+          reclamationMessage: undefined,
+          relatedRequestNumber: undefined,
+        }, {
+          keepErrors: false,
+          keepDirty: false,
+          keepIsSubmitted: false,
+          keepTouched: false,
+          keepIsValid: false,
+          keepSubmitCount: false,
+        });
+        
+        // S'assurer que tous les états sont réinitialisés
         setVerifiedStudent(null);
         setValidationError(null);
         setStudentHistory([]);
         setAvailableSemesters([]);
-        setSubmitResult(null);
-      }, 2000);
+        setIsSubmitting(false);
+        
+        // Réinitialiser les valeurs des champs pour s'assurer qu'ils sont vides
+        setValue("documentType", undefined as unknown as DocumentType, { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("email", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("apogee", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        setValue("cin", "", { shouldDirty: false, shouldTouch: false, shouldValidate: false });
+        
+        timeoutRef.current = null;
+      }, 5000); // 5 secondes
     } catch (error) {
       console.error("Erreur lors de l'envoi de la demande", error);
       setSubmitResult({
